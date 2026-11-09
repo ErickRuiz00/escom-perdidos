@@ -30,6 +30,7 @@ class _ForgotPasswordViewState extends State<ForgotPasswordView> {
   }
 
   Future<void> _submit() async {
+    if (context.read<AuthViewModel>().busy) return;
     FocusScope.of(context).unfocus();
     if (!_formKey.currentState!.validate()) return;
     final vm = context.read<AuthViewModel>();
@@ -95,6 +96,7 @@ class _ForgotPasswordViewState extends State<ForgotPasswordView> {
               PasswordField(
                 controller: _password,
                 label: 'Nueva contraseña',
+                newPassword: true,
                 validator: Validators.password,
                 textInputAction: TextInputAction.done,
                 onSubmitted: (_) => _submit(),
@@ -108,7 +110,9 @@ class _ForgotPasswordViewState extends State<ForgotPasswordView> {
             ),
             if (_codeSent)
               TextButton(
-                onPressed: vm.busy ? null : () => setState(() => _codeSent = false),
+                onPressed: vm.busy
+                    ? null
+                    : () => setState(() => _codeSent = false),
                 child: const Text('Solicitar otro código'),
               ),
           ],

@@ -17,9 +17,7 @@ import 'viewmodels/auth_viewmodel.dart';
 import 'viewmodels/profile_viewmodel.dart';
 import 'viewmodels/reports_viewmodel.dart';
 import 'viewmodels/weather_viewmodel.dart';
-import 'views/auth/login_view.dart';
-import 'views/home/home_shell.dart';
-import 'views/splash_view.dart';
+import 'views/auth/auth_flow.dart';
 
 /// Raíz de la app: registra las dependencias (servicios → repositorios →
 /// ViewModels) y elige la pantalla inicial según el estado de la sesión.
@@ -44,7 +42,8 @@ class EscomPerdidosApp extends StatelessWidget {
         Provider(create: (_) => MediaService()),
         Provider(create: (_) => LocationService()),
         Provider(
-          create: (_) => AuthRepository(database: database, secureStore: secureStore),
+          create: (_) =>
+              AuthRepository(database: database, secureStore: secureStore),
         ),
         // ViewModels.
         ChangeNotifierProvider(
@@ -83,8 +82,9 @@ class _AppView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final status = context.select<AuthViewModel, AuthStatus>((a) => a.status);
-    final dark = context.select<AuthViewModel, bool>((a) => a.user?.darkMode ?? false);
+    final dark = context.select<AuthViewModel, bool>(
+      (a) => a.user?.darkMode ?? false,
+    );
 
     return MaterialApp(
       title: 'Encuéntralo ESCOM',
@@ -100,14 +100,7 @@ class _AppView extends StatelessWidget {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      home: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 300),
-        child: switch (status) {
-          AuthStatus.unknown => const SplashView(),
-          AuthStatus.unauthenticated => const LoginView(),
-          AuthStatus.authenticated => const HomeShell(),
-        },
-      ),
+      home: const AuthGate(),
     );
   }
 }
