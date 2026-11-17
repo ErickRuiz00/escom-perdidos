@@ -55,6 +55,11 @@ class _LoginViewState extends State<LoginView> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               ErrorBanner(message: vm.error),
+              if (vm.notice case final notice?)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: Text(notice),
+                ),
               TextFormField(
                 controller: _email,
                 keyboardType: TextInputType.emailAddress,
@@ -81,6 +86,18 @@ class _LoginViewState extends State<LoginView> {
                   onPressed: vm.busy ? null : () => _open('/forgot-password'),
                   child: const Text('¿Olvidaste tu contraseña?'),
                 ),
+              ),
+              TextButton(
+                onPressed: vm.busy
+                    ? null
+                    : () {
+                        vm.clearError();
+                        Navigator.of(context).pushNamed(
+                          '/confirm-email',
+                          arguments: _email.text.trim(),
+                        );
+                      },
+                child: const Text('Confirmar mi correo'),
               ),
               const SizedBox(height: 8),
               LoadingButton(

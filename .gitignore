@@ -43,3 +43,9 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Public client configuration is local to each developer/environment.
+/config/supabase.local.json
+
+# Kotlin build/session cache generated during Android compilation.
+/android/.kotlin/

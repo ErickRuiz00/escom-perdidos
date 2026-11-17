@@ -9,10 +9,20 @@
 class Env {
   Env._();
 
+  static const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
+  // Enable only after configuring custom SMTP and templates containing .Token.
+  static const supabaseEmailOtpEnabled = bool.fromEnvironment(
+    'SUPABASE_EMAIL_OTP_ENABLED',
+  );
+  static const supabasePublishableKey = String.fromEnvironment(
+    'SUPABASE_PUBLISHABLE_KEY',
+  );
+
   /// Client ID (tipo "Web") de Google Cloud para el inicio de sesión OAuth.
   /// Si está vacío, el botón de Google se muestra deshabilitado.
-  static const googleServerClientId =
-      String.fromEnvironment('GOOGLE_SERVER_CLIENT_ID');
+  static const googleServerClientId = String.fromEnvironment(
+    'GOOGLE_SERVER_CLIENT_ID',
+  );
 
   /// URL base del servicio de clima. Debe ser HTTPS.
   static const weatherBaseUrl = String.fromEnvironment(

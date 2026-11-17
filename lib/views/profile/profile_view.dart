@@ -31,7 +31,11 @@ class ProfileView extends StatelessWidget {
     );
     if (!ok || !context.mounted) return;
     Navigator.of(context).popUntil((r) => r.isFirst);
-    await context.read<AuthViewModel>().logout();
+    final auth = context.read<AuthViewModel>();
+    final success = await auth.logout();
+    if (!success && context.mounted) {
+      showSnack(context, auth.error ?? 'No se pudo cerrar la sesión.', error: true);
+    }
   }
 
   Future<void> _run(BuildContext context, Future<String?> action) async {

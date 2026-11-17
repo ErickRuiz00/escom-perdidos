@@ -1,271 +1,386 @@
-import 'dart:isolate';
-import 'dart:math';
+import 'dart:async';
+import 'dart:io';
 
+import 'package:http/http.dart' as http;
 import 'package:sqflite/sqflite.dart';
-import 'package:uuid/uuid.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 
 import '../../core/errors/app_exception.dart';
-import '../../core/security/jwt_service.dart';
-import '../../core/security/password_hasher.dart';
+import '../../core/config/env.dart';
 import '../local/app_database.dart';
 import '../local/secure_store.dart';
 import '../models/user.dart';
-import '../services/google_auth_service.dart';
+import '../services/supabase_service.dart';
+import '../services/auth_link_service.dart';
 
-/// Registro, ingreso, sesión y recuperación de contraseña (RF1).
+/// Supabase owns credentials and sessions. SQLite is only a compatibility
+/// cache for the existing report foreign keys and device-local avatars.
 class AuthRepository {
   AuthRepository({
     required AppDatabase database,
     required SecureStore secureStore,
-    GoogleAuthService? google,
-    PasswordHasher hasher = const PasswordHasher(),
-    JwtService jwt = const JwtService(),
-  })  : _database = database,
-        _secure = secureStore,
-        _google = google ?? GoogleAuthService(),
-        _hasher = hasher,
-        _jwt = jwt;
+    required SupabaseService supabase,
+    this.emailOtpEnabled = Env.supabaseEmailOtpEnabled,
+  }) : _database = database,
+       _secure = secureStore,
+       _supabase = supabase;
 
   final AppDatabase _database;
   final SecureStore _secure;
-  final GoogleAuthService _google;
-  final PasswordHasher _hasher;
-  final JwtService _jwt;
+  final SupabaseService _supabase;
+  final bool emailOtpEnabled;
+  sb.SupabaseClient? _recoveryClient;
 
-  static const resetCodeValidity = Duration(minutes: 15);
+  bool get googleAvailable => false;
+  Stream<sb.AuthState> get authChanges => _supabase.authChanges;
 
-  bool get googleAvailable => _google.isAvailable;
-
-  Future<AppUser> register({
+  Future<AppUser?> register({
     required String name,
     required String email,
     required String password,
     String? boleta,
-  }) async {
-    final db = await _database.database;
-    final normalized = email.trim().toLowerCase();
-    if (await _findRow(db, normalized) != null) {
-      throw const AuthException('Ya existe una cuenta con ese correo.');
-    }
-    final salt = _hasher.generateSalt();
-    final user = AppUser(
-      id: const Uuid().v4(),
-      name: name.trim(),
-      email: normalized,
-      provider: 'local',
-      createdAt: DateTime.now(),
-      boleta: _emptyToNull(boleta?.toUpperCase()),
+  }) => _guard(() async {
+    final response = await _supabase.client.auth.signUp(
+      email: _email(email),
+      password: password,
+      emailRedirectTo: AuthLinkService.confirmationRedirect,
+      data: {'name': name.trim(), 'boleta': _optional(boleta?.toUpperCase())},
     );
-    final hash = await _hash(password, salt);
-    await _guard(() => db.insert('users', {
-          ...user.toMap(),
-          'password_salt': salt,
-          'password_hash': hash,
-        }));
-    await _startSession(user);
-    return user;
-  }
+    // A registration request without a session must never open Home.
+    if (response.session == null) return null;
+    return _loadProfile(response.user!);
+  });
 
-  Future<AppUser> login(String email, String password) async {
-    final db = await _database.database;
-    final row = await _findRow(db, email.trim().toLowerCase());
-    // Mismo mensaje para correo inexistente y contraseña incorrecta.
-    const invalid = AuthException('Correo o contraseña incorrectos.');
-    if (row == null) throw invalid;
-    if (row['provider'] != 'local') {
-      throw const AuthException('Esta cuenta usa otro método de ingreso (Google).');
-    }
-    final ok = await _verify(
-      password,
-      row['password_salt'] as String,
-      row['password_hash'] as String,
+  Future<AppUser> login(String email, String password) => _guard(() async {
+    final response = await _supabase.client.auth.signInWithPassword(
+      email: _email(email),
+      password: password,
     );
-    if (!ok) throw invalid;
-    final user = AppUser.fromMap(row);
-    await _startSession(user);
-    return user;
-  }
-
-  /// Devuelve `null` si el usuario cancela el flujo de Google.
-  Future<AppUser?> signInWithGoogle() async {
-    final profile = await _google.signIn();
-    if (profile == null) return null;
-    final db = await _database.database;
-    final email = profile.email.toLowerCase();
-    final row = await _findRow(db, email);
-    AppUser user;
-    if (row == null) {
-      user = AppUser(
-        id: const Uuid().v4(),
-        name: profile.name ?? email.split('@').first,
-        email: email,
-        provider: 'google',
-        createdAt: DateTime.now(),
-        avatarUrl: profile.photoUrl,
+    if (response.session == null || response.user == null) {
+      throw const AuthException(
+        'No se pudo abrir una sesión. Intenta de nuevo.',
       );
-      await _guard(() => db.insert('users', user.toMap()));
-    } else {
-      user = AppUser.fromMap(row);
     }
-    await _startSession(user);
-    return user;
-  }
+    return _loadProfile(response.user!);
+  });
 
-  /// Restaura la sesión si existe un token válido y no expirado.
-  Future<AppUser?> restoreSession() async {
-    final token = await _secure.readToken();
-    if (token == null) return null;
-    final payload = _jwt.verify(token, await _secure.signingSecret());
-    if (payload == null) {
-      await _secure.deleteToken();
-      return null;
-    }
-    final user = await findById(payload['sub'] as String);
-    if (user == null) await _secure.deleteToken();
-    return user;
-  }
-
-  Future<void> logout() async {
-    await _secure.deleteToken();
-    await _google.signOut();
-  }
-
-  Future<AppUser?> findById(String id) async {
-    final db = await _database.database;
-    final rows = await db.query('users', where: 'id = ?', whereArgs: [id], limit: 1);
-    return rows.isEmpty ? null : AppUser.fromMap(rows.first);
-  }
-
-  /// Genera un código de 6 dígitos para restablecer la contraseña.
-  ///
-  /// Sin servidor de correo, la vista lo entrega al usuario mediante una
-  /// notificación local. En la BD solo se guarda su hash y su vigencia.
-  Future<String> requestPasswordReset(String email) async {
-    final db = await _database.database;
-    final row = await _findRow(db, email.trim().toLowerCase());
-    if (row == null || row['provider'] != 'local') {
-      throw const AuthException('No encontramos una cuenta con ese correo.');
-    }
-    final code = (Random.secure().nextInt(900000) + 100000).toString();
-    await db.update(
-      'users',
-      {
-        'reset_code_hash': await _hash(code, row['password_salt'] as String),
-        'reset_code_expires':
-            DateTime.now().add(resetCodeValidity).millisecondsSinceEpoch,
-      },
-      where: 'id = ?',
-      whereArgs: [row['id']],
+  Future<AppUser> confirmEmail(String email, String code) => _guard(() async {
+    _requireOtp();
+    final response = await _supabase.client.auth.verifyOTP(
+      email: _email(email),
+      token: code.trim(),
+      type: sb.OtpType.email,
     );
-    return code;
-  }
+    if (response.session == null || response.user == null) {
+      throw const AuthException(
+        'No se pudo confirmar el correo. Solicita otro código.',
+      );
+    }
+    return _loadProfile(response.user!);
+  });
+
+  Future<void> resendConfirmation(String email) => _guard(() async {
+    await _supabase.client.auth.resend(
+      email: _email(email),
+      type: sb.OtpType.signup,
+      emailRedirectTo: AuthLinkService.confirmationRedirect,
+    );
+  });
+
+  Future<AppUser?> signInWithGoogle() async => throw const AuthException(
+    'El acceso con Google estará disponible en una fase posterior.',
+  );
+
+  Future<AppUser?> restoreSession() => _guard(() async {
+    // A legacy locally signed token never authorizes backend access.
+    await _secure.deleteToken();
+    final client = _supabase.client;
+    if (client.auth.currentSession == null) return null;
+    if (client.auth.currentSession!.isExpired) {
+      await client.auth.refreshSession();
+    }
+    final response = await client.auth.getUser();
+    if (response.user == null) return null;
+    return _loadProfile(response.user!);
+  });
+
+  Future<void> logout() => _guard(() async {
+    await cancelPasswordRecovery();
+    await _supabase.client.auth.signOut(scope: sb.SignOutScope.local);
+    await _secure.deleteToken();
+  });
+
+  Future<void> requestPasswordReset(String email) => _guard(() async {
+    await _supabase.client.auth.resetPasswordForEmail(
+      _email(email),
+      redirectTo: AuthLinkService.recoveryRedirect,
+    );
+  });
 
   Future<void> resetPassword({
     required String email,
     required String code,
     required String newPassword,
-  }) async {
-    final db = await _database.database;
-    final row = await _findRow(db, email.trim().toLowerCase());
-    final storedHash = row?['reset_code_hash'] as String?;
-    final expires = row?['reset_code_expires'] as int?;
-    if (row == null || storedHash == null || expires == null) {
-      throw const AuthException('Solicita un nuevo código.');
+  }) => _guard(() async {
+    _requireOtp();
+    // This session has no persistent storage and cannot open Home, even when
+    // recovery is interrupted by closing the app before the password is saved.
+    final recovery = _supabase.createRecoveryClient();
+    try {
+      final response = await recovery.auth.verifyOTP(
+        email: _email(email),
+        token: code.trim(),
+        type: sb.OtpType.recovery,
+      );
+      if (response.session == null) {
+        throw const AuthException('Código inválido o vencido. Solicita otro.');
+      }
+      await recovery.auth.updateUser(sb.UserAttributes(password: newPassword));
+    } finally {
+      try {
+        await recovery.auth.signOut(scope: sb.SignOutScope.local);
+      } catch (_) {
+        // The temporary client has no persistent storage to clear.
+      }
+      await recovery.dispose();
     }
-    if (DateTime.now().millisecondsSinceEpoch > expires) {
-      throw const AuthException('El código expiró. Solicita uno nuevo.');
+  });
+
+  /// Validates standard Supabase email links with a non-persistent SDK client.
+  /// Returns true only for a verified recovery session, never a Home session.
+  Future<bool> openAuthLink(Uri uri) => _guard(() async {
+    if (!AuthLinkService.supports(uri)) {
+      throw const AuthException('Enlace de autenticación no válido.');
     }
-    if (!await _verify(code.trim(), row['password_salt'] as String, storedHash)) {
-      throw const AuthException('El código no es correcto.');
+    await cancelPasswordRecovery();
+    final temporary = _supabase.createRecoveryClient();
+    var keepForRecovery = false;
+    try {
+      final response = await temporary.auth.getSessionFromUrl(uri);
+      final recovery =
+          response.redirectType == 'recovery' ||
+          response.redirectType == 'passwordRecovery';
+      if (recovery != (uri.path == '/recovery') ||
+          (!recovery &&
+              !(uri.queryParameters.containsKey('code') &&
+                  response.redirectType == null) &&
+              response.redirectType != 'signup' &&
+              response.redirectType != 'email')) {
+        throw const AuthException('El enlace no corresponde a esta operación.');
+      }
+      if (response.session.user.emailConfirmedAt == null) {
+        throw const AuthException('El correo todavía no está confirmado.');
+      }
+      // Remove any older app session before presenting a different account's link.
+      await _supabase.client.auth.signOut(scope: sb.SignOutScope.local);
+      if (recovery) {
+        _recoveryClient = temporary;
+        keepForRecovery = true;
+      }
+      return recovery;
+    } finally {
+      if (!keepForRecovery) await _disposeTemporary(temporary);
     }
-    await _setPassword(db, row['id'] as String, newPassword);
+  });
+
+  Future<void> finishPasswordRecovery(String newPassword) => _guard(() async {
+    final recovery = _recoveryClient;
+    if (recovery == null || recovery.auth.currentSession == null) {
+      throw const AuthException(
+        'Abre un enlace de recuperación válido desde tu correo.',
+      );
+    }
+    await recovery.auth.updateUser(sb.UserAttributes(password: newPassword));
+    await cancelPasswordRecovery();
+  });
+
+  Future<void> cancelPasswordRecovery() async {
+    final recovery = _recoveryClient;
+    _recoveryClient = null;
+    if (recovery != null) await _disposeTemporary(recovery);
+  }
+
+  Future<void> _disposeTemporary(sb.SupabaseClient temporary) async {
+    try {
+      await temporary.auth.signOut(scope: sb.SignOutScope.local);
+    } catch (_) {
+      // No persistent storage belongs to this temporary client.
+    }
+    await temporary.dispose();
+  }
+
+  void _requireOtp() {
+    if (!emailOtpEnabled) {
+      throw const AuthException(
+        'Usa el enlace enviado por correo. '
+        'Los códigos de autenticación requieren SMTP y plantillas configuradas.',
+      );
+    }
   }
 
   Future<void> changePassword({
     required String userId,
     required String currentPassword,
     required String newPassword,
-  }) async {
-    final db = await _database.database;
-    final rows = await db.query('users', where: 'id = ?', whereArgs: [userId]);
-    if (rows.isEmpty) throw const AuthException('Usuario no encontrado.');
-    final row = rows.first;
-    final ok = await _verify(
-      currentPassword,
-      row['password_salt'] as String,
-      row['password_hash'] as String,
+  }) => _guard(() async {
+    final client = _supabase.client;
+    final current = client.auth.currentUser;
+    if (current == null || current.id != userId || current.email == null) {
+      throw const AuthException(
+        'Vuelve a iniciar sesión para cambiar la contraseña.',
+      );
+    }
+    await client.auth.signInWithPassword(
+      email: current.email!,
+      password: currentPassword,
     );
-    if (!ok) throw const AuthException('La contraseña actual no es correcta.');
-    await _setPassword(db, userId, newPassword);
-  }
+    await client.auth.updateUser(sb.UserAttributes(password: newPassword));
+  });
 
-  Future<AppUser> updateProfile(AppUser user) async {
+  Future<AppUser> updateProfile(AppUser user) => _guard(() async {
+    final client = _supabase.client;
+    if (client.auth.currentUser?.id != user.id) {
+      throw const AuthException('La sesión no corresponde a este perfil.');
+    }
+    await client
+        .from('profiles')
+        .update({
+          'name': user.name.trim(),
+          'boleta': _optional(user.boleta?.toUpperCase()),
+          'phone': _optional(user.phone),
+          'notifications_enabled': user.notificationsEnabled,
+          'dark_mode': user.darkMode,
+        })
+        .eq('id', user.id)
+        .select('id')
+        .single();
+    await _cacheUser(user);
+    return _loadProfile(client.auth.currentUser!);
+  });
+
+  Future<AppUser> _loadProfile(sb.User identity) async {
+    final row = await _supabase.client
+        .from('profiles')
+        .select()
+        .eq('id', identity.id)
+        .maybeSingle();
+    if (row == null) {
+      throw const StorageException(
+        'No existe tu perfil en Supabase. '
+        'Pide al administrador ejecutar la migración de profiles.',
+      );
+    }
     final db = await _database.database;
-    await _guard(() => db.update(
-          'users',
-          {
-            'name': user.name.trim(),
-            'boleta': _emptyToNull(user.boleta?.toUpperCase()),
-            'phone': _emptyToNull(user.phone),
-            'avatar_path': user.avatarPath,
-            'notifications_enabled': user.notificationsEnabled ? 1 : 0,
-            'dark_mode': user.darkMode ? 1 : 0,
-          },
-          where: 'id = ?',
-          whereArgs: [user.id],
-        ));
-    return (await findById(user.id))!;
-  }
-
-  Future<void> _setPassword(Database db, String userId, String password) async {
-    final salt = _hasher.generateSalt();
-    await db.update(
+    final cached = await db.query(
       'users',
-      {
-        'password_salt': salt,
-        'password_hash': await _hash(password, salt),
-        'reset_code_hash': null,
-        'reset_code_expires': null,
-      },
+      columns: ['avatar_path'],
       where: 'id = ?',
-      whereArgs: [userId],
+      whereArgs: [identity.id],
+      limit: 1,
     );
-  }
-
-  Future<void> _startSession(AppUser user) async {
-    final token = _jwt.issue(
-      userId: user.id,
-      email: user.email,
-      secret: await _secure.signingSecret(),
+    final user = AppUser(
+      id: identity.id,
+      name: row['name'] as String,
+      email: identity.email ?? '',
+      provider: 'supabase',
+      createdAt: DateTime.parse(identity.createdAt),
+      boleta: row['boleta'] as String?,
+      phone: row['phone'] as String?,
+      avatarPath: cached.isEmpty
+          ? null
+          : cached.first['avatar_path'] as String?,
+      notificationsEnabled: row['notifications_enabled'] as bool,
+      darkMode: row['dark_mode'] as bool,
     );
-    await _secure.writeToken(token);
+    await _cacheUser(user);
+    return user;
   }
 
-  Future<Map<String, Object?>?> _findRow(Database db, String email) async {
-    final rows = await db.query('users', where: 'email = ?', whereArgs: [email], limit: 1);
-    return rows.isEmpty ? null : rows.first;
-  }
-
-  // PBKDF2 es costoso a propósito: se calcula en otro isolate para no
-  // bloquear el hilo de la UI (RNF1 - 60 fps).
-  Future<String> _hash(String value, String salt) {
-    final hasher = _hasher;
-    return Isolate.run(() => hasher.hash(value, salt));
-  }
-
-  Future<bool> _verify(String value, String salt, String expected) {
-    final hasher = _hasher;
-    return Isolate.run(() => hasher.verify(value, salt, expected));
+  Future<void> _cacheUser(AppUser user) async {
+    final db = await _database.database;
+    // Preserve legacy accounts and their report ownership even if an email
+    // matches. This internal cache address is never displayed or sent to Auth.
+    final values = {
+      ...user.toMap(),
+      'email': '${user.id}@supabase.local.invalid',
+    };
+    await db.transaction((txn) async {
+      final count = await txn.update(
+        'users',
+        values,
+        where: 'id = ?',
+        whereArgs: [user.id],
+      );
+      if (count == 0) await txn.insert('users', values);
+    });
   }
 
   Future<T> _guard<T>(Future<T> Function() action) async {
     try {
       return await action();
+    } on sb.AuthException catch (e) {
+      if (e.message == 'Code verifier could not be found in local storage.') {
+        throw const AuthException(
+          'Solicita el enlace desde este celular y vuelve a abrirlo aquí. '
+          'Si ya confirmaste el correo, intenta iniciar sesión con tu contraseña.',
+        );
+      }
+      final message = switch (e.code) {
+        'invalid_credentials' => 'Correo o contraseña incorrectos.',
+        'email_not_confirmed' => 'Confirma tu correo antes de iniciar sesión.',
+        'user_already_exists' ||
+        'email_exists' => 'Ya existe una cuenta con ese correo.',
+        'weak_password' =>
+          'La contraseña no cumple los requisitos de seguridad.',
+        'same_password' => 'Elige una contraseña diferente a la anterior.',
+        'otp_expired' ||
+        'otp_disabled' => 'Código inválido o vencido. Solicita otro.',
+        'over_email_send_rate_limit' || 'over_request_rate_limit' =>
+          'Espera un momento antes de solicitar otro correo o intentar de nuevo.',
+        'email_address_invalid' => 'Escribe un correo electrónico válido.',
+        'email_address_not_authorized' =>
+          'El servicio de correo aún no permite '
+              'este destinatario. El administrador debe configurar SMTP en Supabase.',
+        'signup_disabled' => 'El registro está deshabilitado en Supabase.',
+        'session_not_found' ||
+        'refresh_token_not_found' ||
+        'refresh_token_already_used' =>
+          'Tu sesión venció. Vuelve a iniciar sesión.',
+        _ =>
+          'No se pudo completar la autenticación. Revisa tu conexión, '
+              'el código recibido y vuelve a intentarlo.',
+      };
+      throw AuthException(message, cause: e);
+    } on sb.PostgrestException catch (e) {
+      throw StorageException(
+        'No se pudo acceder a tu perfil en Supabase. '
+        'Revisa la migración de profiles y sus políticas RLS.',
+        cause: e,
+      );
     } on DatabaseException catch (e) {
-      throw StorageException('No se pudo guardar la información.', cause: e);
+      throw StorageException(
+        'No se pudo guardar el perfil en este dispositivo.',
+        cause: e,
+      );
+    } on http.ClientException catch (e) {
+      throw NetworkException(
+        'No hay conexión con Supabase. Revisa tu conexión a internet.',
+        cause: e,
+      );
+    } on SocketException catch (e) {
+      throw NetworkException(
+        'No hay conexión con Supabase. Revisa tu conexión a internet.',
+        cause: e,
+      );
+    } on TimeoutException catch (e) {
+      throw NetworkException(
+        'Supabase tardó demasiado en responder. Intenta de nuevo.',
+        cause: e,
+      );
     }
   }
 
-  String? _emptyToNull(String? value) =>
+  String _email(String value) => value.trim().toLowerCase();
+  String? _optional(String? value) =>
       value == null || value.trim().isEmpty ? null : value.trim();
 }

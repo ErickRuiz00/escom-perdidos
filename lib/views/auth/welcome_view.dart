@@ -71,6 +71,18 @@ class WelcomeView extends StatelessWidget {
                               ),
                             ),
                             const SizedBox(height: 32),
+                            ErrorBanner(
+                              message: context.watch<AuthViewModel>().error,
+                            ),
+                            if (context.watch<AuthViewModel>().notice
+                                case final notice?)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 16),
+                                child: Text(
+                                  notice,
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
                             FilledButton.icon(
                               onPressed: () => _open(context, '/login'),
                               icon: const Icon(

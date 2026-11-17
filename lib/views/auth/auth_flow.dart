@@ -5,9 +5,11 @@ import '../../viewmodels/auth_viewmodel.dart';
 import '../home/home_shell.dart';
 import '../splash_view.dart';
 import 'forgot_password_view.dart';
+import 'confirm_email_view.dart';
 import 'login_view.dart';
 import 'register_view.dart';
 import 'welcome_view.dart';
+import 'reset_password_view.dart';
 
 /// La pila de acceso desaparece completa al abrir una sesión.
 class AuthGate extends StatefulWidget {
@@ -39,9 +41,35 @@ class _AuthGateState extends State<AuthGate> {
     return switch (status) {
       AuthStatus.unknown => const SplashView(),
       AuthStatus.unauthenticated => const AuthFlow(),
-      AuthStatus.authenticated => widget.authenticated,
+      AuthStatus.passwordRecovery => const ResetPasswordView(),
+      AuthStatus.authenticated => _AuthenticatedFlow(
+        child: widget.authenticated,
+      ),
     };
   }
+}
+
+/// Private routes are removed together with the authenticated session.
+class _AuthenticatedFlow extends StatefulWidget {
+  const _AuthenticatedFlow({required this.child});
+  final Widget child;
+
+  @override
+  State<_AuthenticatedFlow> createState() => _AuthenticatedFlowState();
+}
+
+class _AuthenticatedFlowState extends State<_AuthenticatedFlow> {
+  final _navigatorKey = GlobalKey<NavigatorState>();
+
+  @override
+  Widget build(BuildContext context) => NavigatorPopHandler(
+    onPopWithResult: (_) => _navigatorKey.currentState!.pop(),
+    child: Navigator(
+      key: _navigatorKey,
+      onGenerateRoute: (_) =>
+          MaterialPageRoute<void>(builder: (_) => widget.child),
+    ),
+  );
 }
 
 class AuthFlow extends StatefulWidget {
@@ -65,6 +93,9 @@ class _AuthFlowState extends State<AuthFlow> {
             '/login' => const LoginView(),
             '/register' => const RegisterView(),
             '/forgot-password' => const ForgotPasswordView(),
+            '/confirm-email' => ConfirmEmailView(
+              email: settings.arguments as String? ?? '',
+            ),
             _ => const WelcomeView(),
           };
           final reduceMotion = MediaQuery.disableAnimationsOf(context);

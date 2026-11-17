@@ -6,7 +6,7 @@ import '../../viewmodels/auth_viewmodel.dart';
 import '../widgets/common.dart';
 import 'auth_widgets.dart';
 
-/// Recuperación de contraseña en dos pasos: pedir código y restablecer.
+/// Standard email links by default; OTP is optional with custom SMTP.
 class ForgotPasswordView extends StatefulWidget {
   const ForgotPasswordView({super.key});
 
@@ -34,11 +34,16 @@ class _ForgotPasswordViewState extends State<ForgotPasswordView> {
     FocusScope.of(context).unfocus();
     if (!_formKey.currentState!.validate()) return;
     final vm = context.read<AuthViewModel>();
-    if (!_codeSent) {
+    if (!_codeSent || !vm.emailOtpEnabled) {
       final ok = await vm.requestPasswordReset(_email.text);
       if (ok && mounted) {
         setState(() => _codeSent = true);
-        showSnack(context, 'Te enviamos el código en una notificación.');
+        showSnack(
+          context,
+          vm.emailOtpEnabled
+              ? 'Si la cuenta existe, recibirás un código por correo.'
+              : 'Si la cuenta existe, recibirás un enlace para cambiar tu contraseña.',
+        );
       }
       return;
     }
@@ -59,9 +64,12 @@ class _ForgotPasswordViewState extends State<ForgotPasswordView> {
     return AuthScaffold(
       showBack: true,
       title: 'Recuperar contraseña',
-      subtitle: _codeSent
+      subtitle: !vm.emailOtpEnabled
+          ? 'Abre el enlace que enviaremos a tu correo en este celular para '
+                'elegir una nueva contraseña.'
+          : _codeSent
           ? 'Escribe el código de 6 dígitos que recibiste y tu nueva contraseña.'
-          : 'Te enviaremos un código para restablecerla.',
+          : 'Te enviaremos un código por correo para restablecerla.',
       child: Form(
         key: _formKey,
         autovalidateMode: AutovalidateMode.onUserInteraction,
@@ -71,7 +79,7 @@ class _ForgotPasswordViewState extends State<ForgotPasswordView> {
             ErrorBanner(message: vm.error),
             TextFormField(
               controller: _email,
-              enabled: !_codeSent,
+              enabled: !_codeSent || !vm.emailOtpEnabled,
               keyboardType: TextInputType.emailAddress,
               validator: Validators.email,
               decoration: const InputDecoration(
@@ -79,7 +87,7 @@ class _ForgotPasswordViewState extends State<ForgotPasswordView> {
                 prefixIcon: Icon(Icons.alternate_email_rounded),
               ),
             ),
-            if (_codeSent) ...[
+            if (_codeSent && vm.emailOtpEnabled) ...[
               const SizedBox(height: 14),
               TextFormField(
                 controller: _code,
@@ -104,11 +112,15 @@ class _ForgotPasswordViewState extends State<ForgotPasswordView> {
             ],
             const SizedBox(height: 24),
             LoadingButton(
-              label: _codeSent ? 'Restablecer contraseña' : 'Enviar código',
+              label: !vm.emailOtpEnabled
+                  ? 'Enviar enlace'
+                  : _codeSent
+                  ? 'Restablecer contraseña'
+                  : 'Enviar código',
               loading: vm.busy,
               onPressed: _submit,
             ),
-            if (_codeSent)
+            if (_codeSent && vm.emailOtpEnabled)
               TextButton(
                 onPressed: vm.busy
                     ? null
