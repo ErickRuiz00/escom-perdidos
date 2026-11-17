@@ -4,7 +4,10 @@ import '../../core/constants/escom.dart';
 import '../../data/models/report_filter.dart';
 
 /// Hoja inferior para filtrar por categoría, estado y lugar, y para ordenar.
-Future<ReportFilter?> showFilterSheet(BuildContext context, ReportFilter current) {
+Future<ReportFilter?> showFilterSheet(
+  BuildContext context,
+  ReportFilter current,
+) {
   return showModalBottomSheet<ReportFilter>(
     context: context,
     isScrollControlled: true,
@@ -53,21 +56,25 @@ class _FilterSheetState extends State<_FilterSheet> {
                   values: ReportStatus.values,
                   label: (s) => s.label,
                   selected: _filter.status,
-                  onSelected: (s) => _filter = _filter.copyWith(status: () => s),
+                  onSelected: (s) =>
+                      _filter = _filter.copyWith(status: () => s),
                 ),
                 _section('Categoría'),
                 _chips<ItemCategory>(
                   values: ItemCategory.values,
                   label: (c) => c.label,
                   selected: _filter.category,
-                  onSelected: (c) => _filter = _filter.copyWith(category: () => c),
+                  onSelected: (c) =>
+                      _filter = _filter.copyWith(category: () => c),
                 ),
                 _section('Lugar'),
                 _chips<String>(
+                  locationTags: true,
                   values: Escom.locations,
                   label: (l) => l,
                   selected: _filter.location,
-                  onSelected: (l) => _filter = _filter.copyWith(location: () => l),
+                  onSelected: (l) =>
+                      _filter = _filter.copyWith(location: () => l),
                 ),
                 const SizedBox(height: 16),
               ],
@@ -81,7 +88,8 @@ class _FilterSheetState extends State<_FilterSheet> {
                 children: [
                   Expanded(
                     child: OutlinedButton(
-                      onPressed: () => Navigator.pop(context, _filter.clearFilters()),
+                      onPressed: () =>
+                          Navigator.pop(context, _filter.clearFilters()),
                       child: const Text('Limpiar'),
                     ),
                   ),
@@ -102,9 +110,9 @@ class _FilterSheetState extends State<_FilterSheet> {
   }
 
   Widget _section(String title) => Padding(
-        padding: const EdgeInsets.only(top: 20, bottom: 8),
-        child: Text(title, style: Theme.of(context).textTheme.titleSmall),
-      );
+    padding: const EdgeInsets.only(top: 20, bottom: 8),
+    child: Text(title, style: Theme.of(context).textTheme.titleSmall),
+  );
 
   Widget _chips<T>({
     required List<T> values,
@@ -112,13 +120,29 @@ class _FilterSheetState extends State<_FilterSheet> {
     required T? selected,
     required void Function(T?) onSelected,
     bool allowNone = true,
+    bool locationTags = false,
   }) {
+    final colors = Theme.of(context).colorScheme;
     return Wrap(
       spacing: 8,
       runSpacing: 8,
       children: [
         for (final value in values)
           ChoiceChip(
+            backgroundColor: locationTags ? colors.secondaryContainer : null,
+            selectedColor: locationTags ? colors.secondaryContainer : null,
+            labelStyle: locationTags
+                ? TextStyle(color: colors.onSecondaryContainer)
+                : null,
+            checkmarkColor: locationTags ? colors.onSecondaryContainer : null,
+            side: locationTags
+                ? BorderSide(
+                    color: value == selected
+                        ? colors.secondary
+                        : colors.outline,
+                    width: value == selected ? 2 : 1,
+                  )
+                : null,
             label: Text(label(value)),
             selected: value == selected,
             onSelected: (on) => setState(() {

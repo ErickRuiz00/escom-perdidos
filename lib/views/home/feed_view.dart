@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/escom.dart';
-import '../../core/theme/app_theme.dart';
+import '../../core/theme/app_status_colors.dart';
 import '../../core/utils/formatters.dart';
 import '../../data/models/report.dart';
 import '../../viewmodels/auth_viewmodel.dart';
@@ -44,9 +44,9 @@ class _FeedViewState extends State<FeedView> {
   }
 
   void _openDetail(Report report) {
-    Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => ReportDetailView(reportId: report.id),
-    ));
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => ReportDetailView(reportId: report.id)),
+    );
   }
 
   Future<void> _openFilters() async {
@@ -58,7 +58,9 @@ class _FeedViewState extends State<FeedView> {
   @override
   Widget build(BuildContext context) {
     final vm = context.watch<ReportsViewModel>();
-    final user = context.select<AuthViewModel, String>((a) => a.user?.name ?? '');
+    final user = context.select<AuthViewModel, String>(
+      (a) => a.user?.name ?? '',
+    );
     final firstName = user.split(' ').first;
     final theme = Theme.of(context);
 
@@ -67,24 +69,44 @@ class _FeedViewState extends State<FeedView> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Hola, $firstName 👋', style: theme.textTheme.headlineSmall
-              ?.copyWith(fontWeight: FontWeight.w800)),
+          Text(
+            'Hola, $firstName 👋',
+            style: theme.textTheme.headlineSmall?.copyWith(
+              fontWeight: FontWeight.w800,
+            ),
+          ),
           const SizedBox(height: 4),
-          Text('¿Qué se perdió hoy en la ESCOM?',
-              style: theme.textTheme.bodyMedium
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+          Text(
+            '¿Qué se perdió hoy en la ESCOM?',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
           const SizedBox(height: 16),
           const WeatherCard(),
           const SizedBox(height: 12),
-          Row(children: [
-            Expanded(child: _StatTile(type: ReportType.lost, count: vm.count(ReportType.lost))),
-            const SizedBox(width: 12),
-            Expanded(child: _StatTile(type: ReportType.found, count: vm.count(ReportType.found))),
-          ]),
+          Row(
+            children: [
+              Expanded(
+                child: _StatTile(
+                  type: ReportType.lost,
+                  count: vm.count(ReportType.lost),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _StatTile(
+                  type: ReportType.found,
+                  count: vm.count(ReportType.found),
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 16),
           _TypeChips(
             selected: vm.filter.type,
-            onSelected: (t) => vm.updateFilter(vm.filter.copyWith(type: () => t)),
+            onSelected: (t) =>
+                vm.updateFilter(vm.filter.copyWith(type: () => t)),
           ),
         ],
       ),
@@ -98,29 +120,40 @@ class _FeedViewState extends State<FeedView> {
         icon: Icons.cloud_off_rounded,
         title: 'No pudimos cargar los reportes',
         message: vm.error!,
-        action: FilledButton.tonal(onPressed: vm.load, child: const Text('Reintentar')),
+        action: FilledButton.tonal(
+          onPressed: vm.load,
+          child: const Text('Reintentar'),
+        ),
       );
     } else {
       content = RefreshIndicator(
         onRefresh: _refresh,
         child: vm.visible.isEmpty
-            ? ListView(children: [
-                header,
-                EmptyState(
-                  icon: Icons.search_off_rounded,
-                  title: 'Sin resultados',
-                  message: vm.filter.query.isEmpty && vm.filter.activeCount == 0
-                      ? 'Aún no hay reportes. ¡Sé el primero!'
-                      : 'Prueba con otras palabras o quita algunos filtros.',
-                  action: vm.filter.activeCount > 0
-                      ? TextButton(
-                          onPressed: () => vm.updateFilter(vm.filter.clearFilters()),
-                          child: const Text('Quitar filtros'),
-                        )
-                      : null,
-                ),
-              ])
-            : ReportList(reports: vm.visible, onTap: _openDetail, header: header),
+            ? ListView(
+                children: [
+                  header,
+                  EmptyState(
+                    icon: Icons.search_off_rounded,
+                    title: 'Sin resultados',
+                    message:
+                        vm.filter.query.isEmpty && vm.filter.activeCount == 0
+                        ? 'Aún no hay reportes. ¡Sé el primero!'
+                        : 'Prueba con otras palabras o quita algunos filtros.',
+                    action: vm.filter.activeCount > 0
+                        ? TextButton(
+                            onPressed: () =>
+                                vm.updateFilter(vm.filter.clearFilters()),
+                            child: const Text('Quitar filtros'),
+                          )
+                        : null,
+                  ),
+                ],
+              )
+            : ReportList(
+                reports: vm.visible,
+                onTap: _openDetail,
+                header: header,
+              ),
       );
     }
 
@@ -173,32 +206,38 @@ class _StatTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = AppTheme.typeColor(type);
+    final badge = AppStatusColors.of(context).forType(type);
     final theme = Theme.of(context);
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(14),
-        child: Row(children: [
-          CircleAvatar(
-            backgroundColor: color.withValues(alpha: 0.12),
-            child: Icon(type.icon, color: color),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('$count',
-                    style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
-                Text(
-                  type == ReportType.lost ? 'Buscándose' : 'Por devolver',
-                  style: theme.textTheme.bodySmall,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
+        child: Row(
+          children: [
+            CircleAvatar(
+              backgroundColor: badge.background,
+              child: Icon(type.icon, color: badge.foreground),
             ),
-          ),
-        ]),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '$count',
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  Text(
+                    type == ReportType.lost ? 'Buscándose' : 'Por devolver',
+                    style: theme.textTheme.bodySmall,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -214,22 +253,24 @@ class _TypeChips extends StatelessWidget {
   Widget build(BuildContext context) {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
-      child: Row(children: [
-        ChoiceChip(
-          label: const Text('Todos'),
-          selected: selected == null,
-          onSelected: (_) => onSelected(null),
-        ),
-        for (final type in ReportType.values) ...[
-          const SizedBox(width: 8),
+      child: Row(
+        children: [
           ChoiceChip(
-            avatar: Icon(type.icon, size: 18),
-            label: Text(type == ReportType.lost ? 'Perdidos' : 'Encontrados'),
-            selected: selected == type,
-            onSelected: (_) => onSelected(type),
+            label: const Text('Todos'),
+            selected: selected == null,
+            onSelected: (_) => onSelected(null),
           ),
+          for (final type in ReportType.values) ...[
+            const SizedBox(width: 8),
+            ChoiceChip(
+              avatar: Icon(type.icon, size: 18),
+              label: Text(type == ReportType.lost ? 'Perdidos' : 'Encontrados'),
+              selected: selected == type,
+              onSelected: (_) => onSelected(type),
+            ),
+          ],
         ],
-      ]),
+      ),
     );
   }
 }

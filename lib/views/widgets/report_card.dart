@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../core/constants/escom.dart';
+import '../../core/theme/app_status_colors.dart';
 import '../../core/utils/formatters.dart';
 import '../../data/models/report.dart';
 import 'common.dart';
@@ -20,94 +20,67 @@ class ReportCard extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
-        child: Opacity(
-          opacity: report.isActive ? 1 : 0.6,
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                Hero(
-                  tag: 'photo-${report.id}',
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: SizedBox.square(
-                      dimension: 84,
-                      child: ReportImage(
-                        path: report.photoPath,
-                        category: report.category,
-                        decodeWidth: 84,
-                        iconSize: 34,
-                      ),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              Hero(
+                tag: 'photo-${report.id}',
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: SizedBox.square(
+                    dimension: 84,
+                    child: ReportImage(
+                      path: report.photoPath,
+                      category: report.category,
+                      decodeWidth: 84,
+                      iconSize: 34,
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 4,
-                        children: [
-                          TypeBadge(type: report.type, dense: true),
-                          if (!report.isActive) const _ResolvedBadge(),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        report.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Icon(Icons.place_outlined, size: 14, color: muted),
-                          const SizedBox(width: 2),
-                          Flexible(
-                            child: Text(
-                              '${report.location} · ${Formatters.relative(report.createdAt)}',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.bodySmall?.copyWith(color: muted),
-                            ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: [
+                        TypeBadge(type: report.type, dense: true),
+                        if (!report.isActive)
+                          const StatusBadge(
+                            state: ItemVisualState.delivered,
+                            label: 'Resuelto',
+                            dense: true,
                           ),
-                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      report.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
                       ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(height: 4),
+                    LocationTag(location: report.location, dense: true),
+                    const SizedBox(height: 4),
+                    Text(
+                      Formatters.relative(report.createdAt),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(color: muted),
+                    ),
+                  ],
                 ),
-                Icon(Icons.chevron_right_rounded, color: muted),
-              ],
-            ),
+              ),
+              Icon(Icons.chevron_right_rounded, color: muted),
+            ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ResolvedBadge extends StatelessWidget {
-  const _ResolvedBadge();
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: colors.secondaryContainer,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        ReportStatus.resolved.label,
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: colors.onSecondaryContainer,
         ),
       ),
     );
@@ -131,34 +104,36 @@ class ReportList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(builder: (context, constraints) {
-      final columns = (constraints.maxWidth / 380).floor().clamp(1, 3);
-      // La altura crece con el tamaño de letra del sistema para evitar
-      // textos superpuestos con fuentes grandes (accesibilidad).
-      final textHeight = MediaQuery.textScalerOf(context).scale(76);
-      final extent = 24 + textHeight.clamp(84.0, 220.0);
-      return CustomScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        slivers: [
-          if (header != null) SliverToBoxAdapter(child: header),
-          SliverPadding(
-            padding: padding,
-            sliver: SliverGrid.builder(
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: columns,
-                mainAxisSpacing: 12,
-                crossAxisSpacing: 12,
-                mainAxisExtent: extent,
-              ),
-              itemCount: reports.length,
-              itemBuilder: (context, i) => ReportCard(
-                report: reports[i],
-                onTap: () => onTap(reports[i]),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = (constraints.maxWidth / 380).floor().clamp(1, 3);
+        // La altura crece con el tamaño de letra del sistema para evitar
+        // textos superpuestos con fuentes grandes (accesibilidad).
+        final textHeight = MediaQuery.textScalerOf(context).scale(112);
+        final extent = 24 + textHeight.clamp(112.0, 320.0);
+        return CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            if (header != null) SliverToBoxAdapter(child: header),
+            SliverPadding(
+              padding: padding,
+              sliver: SliverGrid.builder(
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: columns,
+                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 12,
+                  mainAxisExtent: extent,
+                ),
+                itemCount: reports.length,
+                itemBuilder: (context, i) => ReportCard(
+                  report: reports[i],
+                  onTap: () => onTap(reports[i]),
+                ),
               ),
             ),
-          ),
-        ],
-      );
-    });
+          ],
+        );
+      },
+    );
   }
 }

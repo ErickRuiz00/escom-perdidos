@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../../core/constants/escom.dart';
-import '../../core/theme/app_theme.dart';
+import '../../core/theme/app_status_colors.dart';
 import '../../data/models/user.dart';
 
 /// Breakpoint a partir del cual se usa el diseño para tablet (RNF1 - adaptativo).
@@ -11,7 +11,11 @@ const double kWideLayout = 700;
 
 /// Limita el ancho del contenido en pantallas grandes para que no se estire.
 class ConstrainedContent extends StatelessWidget {
-  const ConstrainedContent({super.key, required this.child, this.maxWidth = 560});
+  const ConstrainedContent({
+    super.key,
+    required this.child,
+    this.maxWidth = 560,
+  });
 
   final Widget child;
   final double maxWidth;
@@ -48,7 +52,10 @@ class ReportImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final placeholder = _CategoryPlaceholder(category: category, size: iconSize);
+    final placeholder = _CategoryPlaceholder(
+      category: category,
+      size: iconSize,
+    );
     if (path == null) return placeholder;
     final ratio = MediaQuery.devicePixelRatioOf(context);
     return Image.file(
@@ -75,9 +82,9 @@ class _CategoryPlaceholder extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     return ColoredBox(
-      color: colors.primaryContainer.withValues(alpha: 0.6),
+      color: colors.surfaceContainerHighest,
       child: Center(
-        child: Icon(category.icon, size: size, color: colors.onPrimaryContainer),
+        child: Icon(category.icon, size: size, color: colors.onSurfaceVariant),
       ),
     );
   }
@@ -125,25 +132,106 @@ class TypeBadge extends StatelessWidget {
   final bool dense;
 
   @override
+  Widget build(BuildContext context) => StatusBadge(
+    state: type == ReportType.lost
+        ? ItemVisualState.lost
+        : ItemVisualState.found,
+    dense: dense,
+  );
+}
+
+/// Estilos de los cuatro estados, sin modificar el ciclo de vida del reporte.
+class StatusBadge extends StatelessWidget {
+  const StatusBadge({
+    super.key,
+    required this.state,
+    this.label,
+    this.dense = false,
+  });
+
+  final ItemVisualState state;
+  final String? label;
+  final bool dense;
+
+  @override
   Widget build(BuildContext context) {
-    final color = AppTheme.typeColor(type);
+    final colors = AppStatusColors.of(context).forState(state);
+    final (title, icon) = switch (state) {
+      ItemVisualState.lost => ('Perdido', Icons.search_rounded),
+      ItemVisualState.seen => ('Visto', Icons.visibility_outlined),
+      ItemVisualState.found => ('Encontrado', Icons.volunteer_activism_rounded),
+      ItemVisualState.delivered => ('Entregado', Icons.task_alt_rounded),
+    };
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: dense ? 8 : 10, vertical: dense ? 3 : 5),
+      padding: EdgeInsets.symmetric(
+        horizontal: dense ? 8 : 10,
+        vertical: dense ? 3 : 5,
+      ),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
+        color: colors.background,
         borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: colors.foreground.withValues(alpha: 0.18)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(type.icon, size: dense ? 13 : 16, color: color),
+          Icon(icon, size: dense ? 13 : 16, color: colors.foreground),
           const SizedBox(width: 4),
-          Text(
-            type.label,
-            style: TextStyle(
-              color: color,
-              fontWeight: FontWeight.w600,
-              fontSize: dense ? 11 : 13,
+          Flexible(
+            child: Text(
+              label ?? title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: colors.foreground,
+                fontWeight: FontWeight.w600,
+                fontSize: dense ? 11 : 13,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Etiqueta de ubicación institucional, también legible en superficies oscuras.
+class LocationTag extends StatelessWidget {
+  const LocationTag({super.key, required this.location, this.dense = false});
+
+  final String location;
+  final bool dense;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: dense ? 6 : 10,
+        vertical: dense ? 2 : 5,
+      ),
+      decoration: BoxDecoration(
+        color: colors.secondaryContainer,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.place_outlined,
+            size: dense ? 12 : 16,
+            color: colors.onSecondaryContainer,
+          ),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text(
+              location,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: colors.onSecondaryContainer,
+                fontSize: dense ? 11 : 13,
+              ),
             ),
           ),
         ],
@@ -175,14 +263,23 @@ class EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 72, color: theme.colorScheme.primary.withValues(alpha: 0.5)),
+            Icon(
+              icon,
+              size: 72,
+              color: theme.colorScheme.primary.withValues(alpha: 0.5),
+            ),
             const SizedBox(height: 16),
-            Text(title, style: theme.textTheme.titleLarge, textAlign: TextAlign.center),
+            Text(
+              title,
+              style: theme.textTheme.titleLarge,
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: 8),
             Text(
               message,
-              style: theme.textTheme.bodyMedium
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
               textAlign: TextAlign.center,
             ),
             if (action != null) ...[const SizedBox(height: 20), action!],
@@ -259,9 +356,14 @@ void showSnack(BuildContext context, String message, {bool error = false}) {
   final colors = Theme.of(context).colorScheme;
   ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
-    ..showSnackBar(SnackBar(
-      content: Text(message),
-      behavior: SnackBarBehavior.floating,
-      backgroundColor: error ? colors.error : null,
-    ));
+    ..showSnackBar(
+      SnackBar(
+        content: Text(
+          message,
+          style: error ? TextStyle(color: colors.onError) : null,
+        ),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: error ? colors.error : null,
+      ),
+    );
 }

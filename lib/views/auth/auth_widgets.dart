@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/theme/app_theme.dart';
 import '../widgets/common.dart';
 
 /// Estructura compartida por las pantallas de login, registro y recuperación.
@@ -22,7 +23,7 @@ class AuthScaffold extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.light,
+      value: AppTheme.overlayStyle(theme),
       child: Scaffold(
         appBar: showBack
             ? AppBar(
@@ -149,10 +150,6 @@ class GoogleAccessButton extends StatelessWidget {
         hint: 'Próximamente. Usa tu correo para entrar.',
         child: FilledButton.icon(
           onPressed: null,
-          style: FilledButton.styleFrom(
-            disabledBackgroundColor: const Color(0xFFD9CCD3),
-            disabledForegroundColor: const Color(0xFF54404D),
-          ),
           icon: const Icon(Icons.g_mobiledata_rounded, size: 28),
           label: const Text('Continuar con Google'),
         ),

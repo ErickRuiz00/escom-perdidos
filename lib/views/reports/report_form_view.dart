@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/escom.dart';
-import '../../core/theme/app_theme.dart';
+import '../../core/theme/app_status_colors.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/utils/validators.dart';
 import '../../data/models/report.dart';
@@ -49,7 +49,9 @@ class _ReportForm extends StatefulWidget {
 class _ReportFormState extends State<_ReportForm> {
   final _formKey = GlobalKey<FormState>();
   late final _title = TextEditingController(text: widget.original?.title);
-  late final _description = TextEditingController(text: widget.original?.description);
+  late final _description = TextEditingController(
+    text: widget.original?.description,
+  );
   late final _contact = TextEditingController(text: widget.original?.contact);
   bool _saved = false;
 
@@ -79,15 +81,19 @@ class _ReportFormState extends State<_ReportForm> {
       return;
     }
     _saved = true;
-    showSnack(context, vm.isEditing ? 'Cambios guardados' : 'Reporte publicado');
+    showSnack(
+      context,
+      vm.isEditing ? 'Cambios guardados' : 'Reporte publicado',
+    );
     Navigator.pop(context);
   }
 
   Future<void> _pickPhoto() async {
     final fromCamera = await pickPhotoSource(context);
     if (fromCamera == null || !mounted) return;
-    final error =
-        await context.read<ReportFormViewModel>().pickPhoto(fromCamera: fromCamera);
+    final error = await context.read<ReportFormViewModel>().pickPhoto(
+      fromCamera: fromCamera,
+    );
     if (error != null && mounted) showSnack(context, error, error: true);
   }
 
@@ -118,7 +124,9 @@ class _ReportFormState extends State<_ReportForm> {
         if (didPop && !_saved) vm.discard();
       },
       child: Scaffold(
-        appBar: AppBar(title: Text(vm.isEditing ? 'Editar reporte' : 'Nuevo reporte')),
+        appBar: AppBar(
+          title: Text(vm.isEditing ? 'Editar reporte' : 'Nuevo reporte'),
+        ),
         body: SafeArea(
           child: Form(
             key: _formKey,
@@ -134,14 +142,21 @@ class _ReportFormState extends State<_ReportForm> {
                       SegmentedButton<ReportType>(
                         segments: [
                           for (final t in ReportType.values)
-                            ButtonSegment(value: t, icon: Icon(t.icon), label: Text(t.label)),
+                            ButtonSegment(
+                              value: t,
+                              icon: Icon(t.icon),
+                              label: Text(t.label),
+                            ),
                         ],
                         selected: {vm.type},
                         onSelectionChanged: (s) => vm.setType(s.first),
                         style: SegmentedButton.styleFrom(
-                          selectedBackgroundColor:
-                              AppTheme.typeColor(vm.type).withValues(alpha: 0.15),
-                          selectedForegroundColor: AppTheme.typeColor(vm.type),
+                          selectedBackgroundColor: AppStatusColors.of(
+                            context,
+                          ).forType(vm.type).background,
+                          selectedForegroundColor: AppStatusColors.of(
+                            context,
+                          ).forType(vm.type).foreground,
                         ),
                       ),
                       const SizedBox(height: 20),
@@ -159,7 +174,9 @@ class _ReportFormState extends State<_ReportForm> {
                         validator: Validators.title,
                         decoration: InputDecoration(
                           labelText: '¿Qué objeto es?',
-                          hintText: lost ? 'Ej. Audífonos inalámbricos' : 'Ej. Credencial IPN',
+                          hintText: lost
+                              ? 'Ej. Audífonos inalámbricos'
+                              : 'Ej. Credencial IPN',
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -178,28 +195,39 @@ class _ReportFormState extends State<_ReportForm> {
                       ),
                       const SizedBox(height: 8),
                       DropdownButtonFormField<ItemCategory>(
-                        value: vm.category,
+                        initialValue: vm.category,
                         isExpanded: true,
-                        decoration: const InputDecoration(labelText: 'Categoría'),
+                        decoration: const InputDecoration(
+                          labelText: 'Categoría',
+                        ),
                         items: [
                           for (final c in ItemCategory.values)
                             DropdownMenuItem(
                               value: c,
-                              child: Row(children: [
-                                Icon(c.icon, size: 20),
-                                const SizedBox(width: 10),
-                                Flexible(child: Text(c.label, overflow: TextOverflow.ellipsis)),
-                              ]),
+                              child: Row(
+                                children: [
+                                  Icon(c.icon, size: 20),
+                                  const SizedBox(width: 10),
+                                  Flexible(
+                                    child: Text(
+                                      c.label,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                         ],
                         onChanged: (c) => vm.setCategory(c!),
                       ),
                       const SizedBox(height: 16),
                       DropdownButtonFormField<String>(
-                        value: vm.place,
+                        initialValue: vm.place,
                         isExpanded: true,
                         decoration: InputDecoration(
-                          labelText: lost ? '¿Dónde lo perdiste?' : '¿Dónde lo encontraste?',
+                          labelText: lost
+                              ? '¿Dónde lo perdiste?'
+                              : '¿Dónde lo encontraste?',
                         ),
                         items: [
                           for (final l in Escom.locations)
@@ -240,7 +268,9 @@ class _ReportFormState extends State<_ReportForm> {
                       ),
                       const SizedBox(height: 16),
                       LoadingButton(
-                        label: vm.isEditing ? 'Guardar cambios' : 'Publicar reporte',
+                        label: vm.isEditing
+                            ? 'Guardar cambios'
+                            : 'Publicar reporte',
                         loading: vm.saving,
                         onPressed: _save,
                       ),
@@ -248,8 +278,9 @@ class _ReportFormState extends State<_ReportForm> {
                       Text(
                         'No publiques datos sensibles como números de tarjeta o CURP.',
                         textAlign: TextAlign.center,
-                        style: theme.textTheme.bodySmall
-                            ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
                       ),
                     ],
                   ),
@@ -291,23 +322,34 @@ class _PhotoField extends StatelessWidget {
                 ? Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.add_a_photo_rounded, size: 40, color: colors.primary),
+                      Icon(
+                        Icons.add_a_photo_rounded,
+                        size: 40,
+                        color: colors.primary,
+                      ),
                       const SizedBox(height: 8),
                       const Text('Agregar foto (cámara o galería)'),
                     ],
                   )
-                : Stack(fit: StackFit.expand, children: [
-                    ReportImage(path: path, category: category, decodeWidth: 640),
-                    Positioned(
-                      top: 8,
-                      right: 8,
-                      child: IconButton.filledTonal(
-                        tooltip: 'Quitar foto',
-                        icon: const Icon(Icons.close_rounded),
-                        onPressed: onRemove,
+                : Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      ReportImage(
+                        path: path,
+                        category: category,
+                        decodeWidth: 640,
                       ),
-                    ),
-                  ]),
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: IconButton.filledTonal(
+                          tooltip: 'Quitar foto',
+                          icon: const Icon(Icons.close_rounded),
+                          onPressed: onRemove,
+                        ),
+                      ),
+                    ],
+                  ),
           ),
         ),
       ),
@@ -334,18 +376,27 @@ class _LocationField extends StatelessWidget {
     final subtitle = p == null
         ? 'Opcional: guarda el punto exacto con el GPS'
         : p.insideCampus
-            ? 'Dentro del campus · ${p.latitude.toStringAsFixed(5)}, ${p.longitude.toStringAsFixed(5)}'
-            : 'A ${Formatters.distance(p.distanceToEscom)} de la ESCOM';
+        ? 'Dentro del campus · ${p.latitude.toStringAsFixed(5)}, ${p.longitude.toStringAsFixed(5)}'
+        : 'A ${Formatters.distance(p.distanceToEscom)} de la ESCOM';
     return Card(
       child: ListTile(
         leading: loading
             ? const SizedBox.square(
-                dimension: 24, child: CircularProgressIndicator(strokeWidth: 2.5))
-            : Icon(p == null ? Icons.location_searching_rounded : Icons.my_location_rounded),
+                dimension: 24,
+                child: CircularProgressIndicator(strokeWidth: 2.5),
+              )
+            : Icon(
+                p == null
+                    ? Icons.location_searching_rounded
+                    : Icons.my_location_rounded,
+              ),
         title: Text(p == null ? 'Ubicación GPS' : 'Ubicación guardada'),
         subtitle: Text(subtitle),
         trailing: p == null
-            ? TextButton(onPressed: loading ? null : onLocate, child: const Text('Usar'))
+            ? TextButton(
+                onPressed: loading ? null : onLocate,
+                child: const Text('Usar'),
+              )
             : IconButton(
                 tooltip: 'Quitar ubicación',
                 icon: const Icon(Icons.close_rounded),

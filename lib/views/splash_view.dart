@@ -1,24 +1,15 @@
 import 'package:flutter/material.dart';
 
-import 'auth/auth_widgets.dart';
+import '../features/splash/presentation/splash_screen.dart';
 
-/// Se muestra mientras se valida el token de sesión guardado.
+/// Entrada compatible con las vistas existentes; la presentación vive en splash.
 class SplashView extends StatelessWidget {
-  const SplashView({super.key});
+  const SplashView({super.key, this.onFinished});
+
+  final VoidCallback? onFinished;
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox(width: 96, child: AppLogo(size: 96)),
-            SizedBox(height: 24),
-            CircularProgressIndicator(),
-          ],
-        ),
-      ),
-    );
+    return SplashScreen(onFinished: onFinished);
   }
 }

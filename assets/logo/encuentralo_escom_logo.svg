@@ -1,0 +1,12 @@
+<svg viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Logotipo Encuéntralo ESCOM">
+  <rect x="16" y="16" width="88" height="88" rx="22" fill="#D6E4FF" stroke="#0055A5" stroke-width="2" />
+  <path d="M84 34 L42 34 L42 60 L74 60 M42 60 L42 86 L86 86" fill="none" stroke="#001B3D" opacity="0.18" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M84 34 L42 34 L42 60 L74 60 M42 60 L42 86 L86 86" fill="none" stroke="#00839B" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+  <circle cx="84" cy="34" r="5.5" fill="#00839B" />
+  <circle cx="42" cy="34" r="5.5" fill="#00839B" />
+  <circle cx="42" cy="60" r="6" fill="#0055A5" stroke="#00839B" stroke-width="2" />
+  <circle cx="74" cy="60" r="5" fill="#00839B" />
+  <circle cx="42" cy="86" r="5.5" fill="#00839B" />
+  <circle cx="86" cy="86" r="11" fill="none" stroke="#15803D" stroke-width="2" opacity="0.35" />
+  <circle cx="86" cy="86" r="7" fill="#15803D" />
+</svg>

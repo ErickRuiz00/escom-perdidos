@@ -5,10 +5,12 @@ import 'package:escom_perdidos/core/theme/app_theme.dart';
 import 'package:escom_perdidos/data/models/user.dart';
 import 'package:escom_perdidos/data/repositories/auth_repository.dart';
 import 'package:escom_perdidos/data/services/notification_service.dart';
+import 'package:escom_perdidos/features/splash/presentation/animated_circuit_logo.dart';
+import 'package:escom_perdidos/features/splash/presentation/splash_progress_bar.dart';
+import 'package:escom_perdidos/features/splash/presentation/splash_screen.dart';
 import 'package:escom_perdidos/viewmodels/auth_viewmodel.dart';
 import 'package:escom_perdidos/views/auth/auth_flow.dart';
 import 'package:escom_perdidos/views/auth/login_view.dart';
-import 'package:escom_perdidos/views/auth/particle_globe.dart';
 import 'package:escom_perdidos/views/auth/register_view.dart';
 import 'package:escom_perdidos/views/auth/welcome_view.dart';
 import 'package:escom_perdidos/views/splash_view.dart';
@@ -82,12 +84,16 @@ Future<void> _pump(
   bool reduceMotion = true,
   double textScale = 1,
   double keyboard = 0,
+  bool finishSplash = true,
+  bool dark = false,
 }) async {
   await tester.pumpWidget(
     ChangeNotifierProvider.value(
       value: vm,
       child: MaterialApp(
         theme: AppTheme.light(),
+        darkTheme: AppTheme.dark(),
+        themeMode: dark ? ThemeMode.dark : ThemeMode.light,
         locale: const Locale('es', 'MX'),
         supportedLocales: const [Locale('es', 'MX')],
         localizationsDelegates: GlobalMaterialLocalizations.delegates,
@@ -106,6 +112,10 @@ Future<void> _pump(
     ),
   );
   await tester.pump();
+  if (finishSplash) {
+    await tester.pump(SplashScreen.duration);
+    await tester.pumpAndSettle();
+  }
 }
 
 Future<void> _tap(WidgetTester tester, String label) async {
@@ -125,6 +135,158 @@ void main() {
 
   tearDown(() => vm.dispose());
 
+  testWidgets('cambiar de tema conserva el login y el texto escrito', (
+    tester,
+  ) async {
+    await vm.restoreSession();
+    await _pump(tester, vm);
+    await _tap(tester, 'Iniciar con correo');
+    await tester.enterText(find.byType(TextFormField).first, 'ana@ipn.mx');
+    await _pump(tester, vm, dark: true);
+    expect(find.byType(LoginView), findsOneWidget);
+    expect(find.text('ana@ipn.mx'), findsOneWidget);
+    expect(
+      Theme.of(tester.element(find.byType(LoginView))).brightness,
+      Brightness.dark,
+    );
+    await _pump(tester, vm);
+    expect(find.byType(LoginView), findsOneWidget);
+    expect(find.text('ana@ipn.mx'), findsOneWidget);
+    expect(
+      Theme.of(tester.element(find.byType(LoginView))).brightness,
+      Brightness.light,
+    );
+  });
+
+  testWidgets('sesión resuelta conserva la splash durante 2.7 segundos', (
+    tester,
+  ) async {
+    await vm.restoreSession();
+    await _pump(tester, vm, finishSplash: false);
+    expect(find.byType(SplashScreen), findsOneWidget);
+    expect(find.byType(WelcomeView), findsNothing);
+
+    await tester.pump(const Duration(milliseconds: 2699));
+    expect(find.byType(SplashScreen), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.pumpAndSettle();
+    expect(find.byType(SplashScreen), findsNothing);
+    expect(find.byType(WelcomeView), findsOneWidget);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.byType(SplashScreen, skipOffstage: false), findsNothing);
+  });
+
+  testWidgets(
+    'restauración lenta espera sin mostrar acceso ni datos privados',
+    (tester) async {
+      repository.pendingRestore = Completer<AppUser?>();
+      unawaited(vm.restoreSession());
+      await _pump(tester, vm, finishSplash: false);
+      await tester.pump(const Duration(seconds: 5));
+      expect(find.byType(SplashScreen), findsOneWidget);
+      expect(find.byType(WelcomeView), findsNothing);
+      expect(find.text('Área privada'), findsNothing);
+
+      repository.pendingRestore!.complete(null);
+      await tester.pumpAndSettle();
+      expect(find.byType(WelcomeView), findsOneWidget);
+      expect(find.byType(SplashScreen), findsNothing);
+    },
+  );
+
+  testWidgets('restauración rápida abre sesión después de la splash una vez', (
+    tester,
+  ) async {
+    repository.pendingRestore = Completer<AppUser?>();
+    unawaited(vm.restoreSession());
+    await _pump(tester, vm, finishSplash: false);
+    repository.pendingRestore!.complete(_user);
+    await tester.pump();
+    expect(find.byType(SplashScreen), findsOneWidget);
+    expect(find.text('Área privada'), findsNothing);
+
+    await tester.pump(SplashScreen.duration);
+    await tester.pumpAndSettle();
+    expect(find.text('Área privada'), findsOneWidget);
+    await vm.logout();
+    await tester.pump();
+    expect(find.byType(WelcomeView), findsOneWidget);
+    expect(find.byType(SplashScreen), findsNothing);
+  });
+
+  testWidgets('circuito se ilumina antes de llenar la barra de apertura', (
+    tester,
+  ) async {
+    await _pump(tester, vm, finishSplash: false, reduceMotion: false);
+    double circuit() => tester
+        .widget<AnimatedCircuitLogo>(find.byType(AnimatedCircuitLogo))
+        .progress
+        .value;
+    double progress() => tester
+        .widget<SplashProgressBar>(find.byType(SplashProgressBar))
+        .progress
+        .value;
+
+    expect(circuit(), 0);
+    await tester.pump(const Duration(milliseconds: 1100));
+    expect(circuit(), inExclusiveRange(0, 1));
+    expect(progress(), 0);
+    await tester.pump(const Duration(milliseconds: 1200));
+    expect(circuit(), 1);
+    expect(progress(), inExclusiveRange(0, 1));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(progress(), 1);
+  });
+
+  testWidgets('splash admite texto al 200 %, pantalla pequeña y poco alto', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 480);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await _pump(tester, vm, finishSplash: false, textScale: 2);
+    expect(tester.takeException(), isNull);
+    expect(find.text('Encuéntralo ESCOM'), findsOneWidget);
+    await tester.ensureVisible(find.text('COMUNIDAD ESTUDIANTIL ESCOM'));
+    expect(tester.takeException(), isNull);
+    await tester.pump(SplashScreen.duration);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('movimiento reducido muestra el logo completo sin animarlo', (
+    tester,
+  ) async {
+    await _pump(tester, vm, finishSplash: false);
+    final logo = tester.widget<AnimatedCircuitLogo>(
+      find.byType(AnimatedCircuitLogo),
+    );
+    expect(logo.progress.value, 1);
+    await tester.pump(const Duration(milliseconds: 1200));
+    expect(logo.progress.value, 1);
+    expect(tester.takeException(), isNull);
+    await tester.pump(SplashScreen.duration);
+  });
+
+  testWidgets(
+    'desmontar la splash libera animaciones y no llama al finalizar',
+    (tester) async {
+      var completions = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          home: SplashScreen(onFinished: () => completions++),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 900));
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(seconds: 3));
+      expect(completions, 0);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets(
     'espera la restauración; sesión válida omite bienvenida y logout vuelve',
     (tester) async {
@@ -140,10 +302,10 @@ void main() {
       await vm.logout();
       await tester.pumpAndSettle();
       expect(find.byType(WelcomeView), findsOneWidget);
-      expect(find.byType(GlobeFallback), findsOneWidget);
-      expect(find.byType(ParticleGlobe), findsNothing);
       final google = tester.widget<FilledButton>(
-        find.byWidgetPredicate((widget) => widget is FilledButton),
+        find.byWidgetPredicate(
+          (widget) => widget is FilledButton && widget.onPressed == null,
+        ),
       );
       expect(google.onPressed, isNull);
     },
@@ -252,7 +414,7 @@ void main() {
   );
 
   testWidgets(
-    'un asset ausente muestra respaldo y permite entrar inmediatamente',
+    'bienvenida sin animación escolar ni assets permite abrir login',
     (tester) async {
       final messenger = tester.binding.defaultBinaryMessenger;
       messenger.setMockMessageHandler('flutter/assets', (_) async => null);
@@ -270,23 +432,9 @@ void main() {
       expect(tester.takeException(), isNull);
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
-      expect(find.byType(GlobeFallback), findsOneWidget);
-      await _tap(tester, 'Cuaderno');
-      expect(
-        tester
-            .widget<ChoiceChip>(find.widgetWithText(ChoiceChip, 'Cuaderno'))
-            .selected,
-        isTrue,
-      );
-      await tester.ensureVisible(find.byKey(const Key('school-object-globe')));
-      await tester.tap(find.byKey(const Key('school-object-globe')));
-      await tester.pumpAndSettle();
-      expect(
-        tester
-            .widget<ChoiceChip>(find.widgetWithText(ChoiceChip, 'Laptop'))
-            .selected,
-        isTrue,
-      );
+      expect(find.byType(ChoiceChip), findsNothing);
+      expect(find.byKey(const Key('school-object-globe')), findsNothing);
+      expect(find.textContaining('sm_motion'), findsNothing);
       expect(tester.takeException(), isNull);
     },
   );

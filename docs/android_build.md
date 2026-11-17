@@ -1,5 +1,34 @@
 # Compilación Android con memoria limitada
 
+## Comprobación actual: paleta y retirada de Rive
+
+Con Flutter 3.47.2 / Dart 3.13.2 se compiló y abrió la versión actual en
+SM A022M, serie `R58R90LEHTT`, Android 11 / API 30 / armeabi-v7a.
+`assembleDebug` terminó en 86.5 segundos y la instalación en 32.8 segundos.
+APK: 88.6 MiB, sin recursos ni bibliotecas Rive.
+
+El SDK actual exige una versión de Gradle posterior a la del proyecto. Para
+esta prueba se conservan Gradle 8.12, AGP 8.7.3 y Kotlin 2.1.0 con la opción de
+validación indicada por Flutter; no se migraron esas herramientas. Flutter
+agregó `android.builtInKotlin=false` y `android.newDsl=false` a las propiedades
+del proyecto. La compilación utiliza estas opciones temporales:
+
+```powershell
+$env:JAVA_HOME = 'C:\Program Files\Eclipse Adoptium\jdk-17.0.21.9-hotspot'
+& .\android\gradlew.bat --stop
+$env:GRADLE_OPTS = '-Dorg.gradle.project.android.enableJetifier=false -Dorg.gradle.jvmargs="-Xms64m -Xmx1024m -XX:MaxMetaspaceSize=384m -XX:ReservedCodeCacheSize=128m -XX:+UseSerialGC -XX:ActiveProcessorCount=2 -Dfile.encoding=UTF-8"'
+& 'C:\Users\migue\flutter\bin\flutter.bat' run -d R58R90LEHTT --no-pub --no-resident --android-skip-build-dependency-validation
+```
+
+Estos valores solo afectan al proceso de PowerShell y sus hijos. La propiedad
+de sistema evita que el heap global de 2 GB anule el límite de 1 GB. Desactivar
+Jetifier en este intento evita transformar el JAR del motor Flutter, tarea que
+agotaba el heap; AndroidX sigue activo. No se borraron cachés ni se cambió la
+paginación de Windows. La app queda abierta al terminar `--no-resident`.
+
+Los apartados siguientes conservan el historial de compilación anterior con
+Flutter 3.32.8 y el otro teléfono; las referencias a Rive son históricas.
+
 ## Error observado
 
 El comando de desarrollo utiliza Flutter 3.32.8 / Dart 3.8.1:

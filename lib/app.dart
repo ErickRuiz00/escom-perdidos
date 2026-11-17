@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 
@@ -82,9 +83,7 @@ class _AppView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final dark = context.select<AuthViewModel, bool>(
-      (a) => a.user?.darkMode ?? false,
-    );
+    final dark = context.select<AuthViewModel, bool?>((a) => a.user?.darkMode);
 
     return MaterialApp(
       title: 'Encuéntralo ESCOM',
@@ -92,7 +91,15 @@ class _AppView extends StatelessWidget {
       scaffoldMessengerKey: GlobalErrorHandler.messengerKey,
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
-      themeMode: dark ? ThemeMode.dark : ThemeMode.light,
+      themeMode: dark == null
+          ? ThemeMode.system
+          : dark
+          ? ThemeMode.dark
+          : ThemeMode.light,
+      builder: (context, child) => AnnotatedRegion<SystemUiOverlayStyle>(
+        value: AppTheme.overlayStyle(Theme.of(context)),
+        child: child!,
+      ),
       locale: const Locale('es', 'MX'),
       supportedLocales: const [Locale('es', 'MX'), Locale('es'), Locale('en')],
       localizationsDelegates: const [
