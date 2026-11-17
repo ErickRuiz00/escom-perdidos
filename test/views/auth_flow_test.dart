@@ -4,14 +4,17 @@ import 'package:escom_perdidos/core/errors/app_exception.dart';
 import 'package:escom_perdidos/core/theme/app_theme.dart';
 import 'package:escom_perdidos/data/models/user.dart';
 import 'package:escom_perdidos/data/repositories/auth_repository.dart';
-import 'package:escom_perdidos/data/services/notification_service.dart';
+import 'package:escom_perdidos/data/services/auth_link_service.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 import 'package:escom_perdidos/features/splash/presentation/animated_circuit_logo.dart';
 import 'package:escom_perdidos/features/splash/presentation/splash_progress_bar.dart';
 import 'package:escom_perdidos/features/splash/presentation/splash_screen.dart';
 import 'package:escom_perdidos/viewmodels/auth_viewmodel.dart';
 import 'package:escom_perdidos/views/auth/auth_flow.dart';
+import 'package:escom_perdidos/views/auth/confirm_email_view.dart';
 import 'package:escom_perdidos/views/auth/login_view.dart';
 import 'package:escom_perdidos/views/auth/register_view.dart';
+import 'package:escom_perdidos/views/auth/reset_password_view.dart';
 import 'package:escom_perdidos/views/auth/welcome_view.dart';
 import 'package:escom_perdidos/views/splash_view.dart';
 import 'package:flutter/material.dart';
@@ -34,6 +37,26 @@ class _AuthRepository implements AuthRepository {
   int loginCalls = 0;
   int registerCalls = 0;
   int resetCalls = 0;
+  bool needsConfirmation = false;
+  @override
+  bool emailOtpEnabled = true;
+
+  @override
+  Future<void> cancelPasswordRecovery() async {}
+
+  @override
+  Future<bool> openAuthLink(Uri uri) async => uri.path == '/recovery';
+
+  @override
+  Future<void> finishPasswordRecovery(String password) async {
+    resetCalls++;
+  }
+
+  @override
+  Stream<sb.AuthState> get authChanges => const Stream.empty();
+
+  @override
+  bool get googleAvailable => false;
 
   @override
   Future<AppUser?> restoreSession() async => pendingRestore?.future;
@@ -48,21 +71,27 @@ class _AuthRepository implements AuthRepository {
   }
 
   @override
-  Future<AppUser> register({
+  Future<AppUser?> register({
     required String name,
     required String email,
     required String password,
     String? boleta,
   }) async {
     registerCalls++;
-    return _user;
+    return needsConfirmation ? null : _user;
   }
 
   @override
   Future<void> logout() async {}
 
   @override
-  Future<String> requestPasswordReset(String email) async => '123456';
+  Future<void> requestPasswordReset(String email) async {}
+
+  @override
+  Future<AppUser> confirmEmail(String email, String code) async => _user;
+
+  @override
+  Future<void> resendConfirmation(String email) async {}
 
   @override
   Future<void> resetPassword({
@@ -130,7 +159,7 @@ void main() {
 
   setUp(() {
     repository = _AuthRepository();
-    vm = AuthViewModel(repository, NotificationService());
+    vm = AuthViewModel(repository);
   });
 
   tearDown(() => vm.dispose());
@@ -356,6 +385,116 @@ void main() {
     expect(repository.registerCalls, 1);
     expect(find.text('Área privada'), findsOneWidget);
     expect(find.byType(RegisterView, skipOffstage: false), findsNothing);
+  });
+
+  testWidgets(
+    'registro pendiente no abre Home y confirma el correo con código',
+    (tester) async {
+      repository.needsConfirmation = true;
+      await vm.restoreSession();
+      await _pump(tester, vm);
+      await _tap(tester, 'Regístrate');
+      final fields = find.byType(TextFormField);
+      await tester.enterText(fields.at(0), 'Ana López');
+      await tester.enterText(fields.at(1), 'ana@example.org');
+      await tester.enterText(fields.at(3), 'Escom2026');
+      await tester.enterText(fields.at(4), 'Escom2026');
+      await _tap(tester, 'Crear cuenta');
+      expect(find.byType(ConfirmEmailView), findsOneWidget);
+      expect(find.text('Área privada'), findsNothing);
+      expect(vm.status, AuthStatus.unauthenticated);
+      expect(find.text('ana@example.org'), findsOneWidget);
+      await tester.enterText(find.byType(TextFormField).at(1), '123456');
+      await _tap(tester, 'Confirmar correo');
+      expect(find.text('Área privada'), findsOneWidget);
+      expect(find.byType(ConfirmEmailView, skipOffstage: false), findsNothing);
+    },
+  );
+
+  testWidgets('registro estándar pide abrir enlace y no solicita OTP', (
+    tester,
+  ) async {
+    repository.emailOtpEnabled = false;
+    repository.needsConfirmation = true;
+    await vm.restoreSession();
+    await _pump(tester, vm);
+    await _tap(tester, 'Regístrate');
+    final fields = find.byType(TextFormField);
+    await tester.enterText(fields.at(0), 'Ana López');
+    await tester.enterText(fields.at(1), 'ana@example.org');
+    await tester.enterText(fields.at(3), 'Escom2026');
+    await tester.enterText(fields.at(4), 'Escom2026');
+    await _tap(tester, 'Crear cuenta');
+    expect(find.byType(ConfirmEmailView), findsOneWidget);
+    expect(find.byType(TextFormField), findsOneWidget);
+    expect(find.textContaining('Abre el enlace'), findsOneWidget);
+    expect(find.text('Reenviar enlace'), findsOneWidget);
+    expect(find.text('Código de confirmación'), findsNothing);
+    expect(vm.status, AuthStatus.unauthenticated);
+    await _tap(tester, 'Volver a iniciar sesión');
+    expect(find.byType(LoginView), findsOneWidget);
+  });
+
+  testWidgets(
+    'recuperación estándar solicita enlace y valida la nueva contraseña',
+    (tester) async {
+      vm.dispose();
+      repository.emailOtpEnabled = false;
+      final links = AuthLinkService();
+      addTearDown(links.dispose);
+      vm = AuthViewModel(repository, links: links);
+      await vm.restoreSession();
+      await _pump(tester, vm);
+      await _tap(tester, 'Iniciar con correo');
+      await _tap(tester, '¿Olvidaste tu contraseña?');
+      await tester.enterText(
+        find.byType(TextFormField).first,
+        'ana@example.org',
+      );
+      await _tap(tester, 'Enviar enlace');
+      expect(find.byType(TextFormField), findsOneWidget);
+      expect(find.text('Código'), findsNothing);
+      links.receive(Uri.parse(AuthLinkService.recoveryRedirect));
+      await tester.pumpAndSettle();
+      expect(find.byType(ResetPasswordView), findsOneWidget);
+      expect(find.text('Área privada'), findsNothing);
+      await tester.enterText(find.byType(TextFormField).at(0), 'Nueva2026');
+      await tester.enterText(find.byType(TextFormField).at(1), 'Distinta2026');
+      await _tap(tester, 'Guardar nueva contraseña');
+      expect(repository.resetCalls, 0);
+      expect(find.text('Las contraseñas no coinciden'), findsOneWidget);
+      await tester.enterText(find.byType(TextFormField).at(1), 'Nueva2026');
+      await _tap(tester, 'Guardar nueva contraseña');
+      expect(repository.resetCalls, 1);
+      expect(find.byType(WelcomeView), findsOneWidget);
+      expect(vm.status, AuthStatus.unauthenticated);
+    },
+  );
+
+  testWidgets('cerrar sesión retira también las rutas privadas abiertas', (
+    tester,
+  ) async {
+    repository.pendingRestore = Completer<AppUser?>()..complete(_user);
+    await vm.restoreSession();
+    await _pump(tester, vm);
+    final privateContext = tester.element(find.text('Área privada'));
+    unawaited(
+      Navigator.of(privateContext).push(
+        MaterialPageRoute<void>(
+          builder: (_) =>
+              const Scaffold(body: Text('Datos personales privados')),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Datos personales privados'), findsOneWidget);
+    await vm.logout();
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Datos personales privados', skipOffstage: false),
+      findsNothing,
+    );
+    expect(find.byType(WelcomeView), findsOneWidget);
   });
 
   testWidgets(

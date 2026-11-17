@@ -18,7 +18,7 @@ class AppUser {
   final String name;
   final String email;
 
-  /// `local` (correo/contraseña) o `google`.
+  /// `supabase` para cuentas remotas; `local`/`google` en datos heredados.
   final String provider;
   final DateTime createdAt;
   final String? boleta;
@@ -80,16 +80,16 @@ class AppUser {
 
   /// Solo los campos del perfil; el hash y la sal se gestionan en el repositorio.
   Map<String, Object?> toMap() => {
-        'id': id,
-        'name': name,
-        'email': email,
-        'provider': provider,
-        'created_at': createdAt.millisecondsSinceEpoch,
-        'boleta': boleta,
-        'phone': phone,
-        'avatar_path': avatarPath,
-        'avatar_url': avatarUrl,
-        'notifications_enabled': notificationsEnabled ? 1 : 0,
-        'dark_mode': darkMode ? 1 : 0,
-      };
+    'id': id,
+    'name': name,
+    'email': email,
+    'provider': provider,
+    'created_at': createdAt.millisecondsSinceEpoch,
+    'boleta': boleta,
+    'phone': phone,
+    'avatar_path': avatarPath,
+    'avatar_url': avatarUrl,
+    'notifications_enabled': notificationsEnabled ? 1 : 0,
+    'dark_mode': darkMode ? 1 : 0,
+  };
 }

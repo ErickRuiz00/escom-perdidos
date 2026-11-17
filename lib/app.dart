@@ -14,6 +14,8 @@ import 'data/services/api_client.dart';
 import 'data/services/location_service.dart';
 import 'data/services/media_service.dart';
 import 'data/services/notification_service.dart';
+import 'data/services/supabase_service.dart';
+import 'data/services/auth_link_service.dart';
 import 'viewmodels/auth_viewmodel.dart';
 import 'viewmodels/profile_viewmodel.dart';
 import 'viewmodels/reports_viewmodel.dart';
@@ -28,11 +30,15 @@ class EscomPerdidosApp extends StatelessWidget {
     required this.database,
     required this.secureStore,
     required this.notifications,
+    required this.supabase,
+    required this.authLinks,
   });
 
   final AppDatabase database;
   final SecureStore secureStore;
   final NotificationService notifications;
+  final SupabaseService supabase;
+  final AuthLinkService authLinks;
 
   @override
   Widget build(BuildContext context) {
@@ -43,13 +49,16 @@ class EscomPerdidosApp extends StatelessWidget {
         Provider(create: (_) => MediaService()),
         Provider(create: (_) => LocationService()),
         Provider(
-          create: (_) =>
-              AuthRepository(database: database, secureStore: secureStore),
+          create: (_) => AuthRepository(
+            database: database,
+            secureStore: secureStore,
+            supabase: supabase,
+          ),
         ),
         // ViewModels.
         ChangeNotifierProvider(
           create: (context) =>
-              AuthViewModel(context.read<AuthRepository>(), notifications)
+              AuthViewModel(context.read<AuthRepository>(), links: authLinks)
                 ..restoreSession(),
         ),
         ChangeNotifierProvider(

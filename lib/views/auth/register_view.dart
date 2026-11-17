@@ -32,13 +32,18 @@ class _RegisterViewState extends State<RegisterView> {
     if (context.read<AuthViewModel>().busy) return;
     FocusScope.of(context).unfocus();
     if (!_formKey.currentState!.validate()) return;
-    await context.read<AuthViewModel>().register(
+    final vm = context.read<AuthViewModel>();
+    final ok = await vm.register(
       name: _name.text,
       email: _email.text,
       password: _password.text,
       boleta: _boleta.text,
     );
-    // AuthGate retira toda la pila al autenticarse.
+    if (ok && mounted && vm.status != AuthStatus.authenticated) {
+      Navigator.of(
+        context,
+      ).pushReplacementNamed('/confirm-email', arguments: _email.text.trim());
+    }
   }
 
   @override
@@ -77,7 +82,7 @@ class _RegisterViewState extends State<RegisterView> {
                 autocorrect: false,
                 decoration: const InputDecoration(
                   labelText: 'Correo',
-                  hintText: 'tu@alumno.ipn.mx',
+                  hintText: 'tu@correo.com',
                   prefixIcon: Icon(Icons.alternate_email_rounded),
                 ),
               ),

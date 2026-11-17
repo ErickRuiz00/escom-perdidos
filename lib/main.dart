@@ -7,12 +7,19 @@ import 'data/local/app_database.dart';
 import 'data/local/secure_store.dart';
 import 'data/local/seed_data.dart';
 import 'data/services/notification_service.dart';
+import 'data/services/supabase_service.dart';
+import 'data/services/auth_link_service.dart';
 
 Future<void> main() async {
   GlobalErrorHandler.runGuarded(() async {
     WidgetsFlutterBinding.ensureInitialized();
     GlobalErrorHandler.install();
     await initializeDateFormatting('es_MX');
+
+    final supabase = SupabaseService();
+    await supabase.initialize();
+    final authLinks = AuthLinkService();
+    await authLinks.initialize();
 
     final database = AppDatabase();
     final notifications = NotificationService();
@@ -23,10 +30,14 @@ Future<void> main() async {
       debugPrint('No se pudieron cargar los datos de ejemplo: $e');
     }
 
-    runApp(EscomPerdidosApp(
-      database: database,
-      secureStore: SecureStore(),
-      notifications: notifications,
-    ));
+    runApp(
+      EscomPerdidosApp(
+        database: database,
+        secureStore: SecureStore(),
+        notifications: notifications,
+        supabase: supabase,
+        authLinks: authLinks,
+      ),
+    );
   });
 }

@@ -195,7 +195,7 @@ class _ReportFormState extends State<_ReportForm> {
                       ),
                       const SizedBox(height: 8),
                       DropdownButtonFormField<ItemCategory>(
-                        initialValue: vm.category,
+                        value: vm.category,
                         isExpanded: true,
                         decoration: const InputDecoration(
                           labelText: 'Categoría',
@@ -222,7 +222,7 @@ class _ReportFormState extends State<_ReportForm> {
                       ),
                       const SizedBox(height: 16),
                       DropdownButtonFormField<String>(
-                        initialValue: vm.place,
+                        value: vm.place,
                         isExpanded: true,
                         decoration: InputDecoration(
                           labelText: lost

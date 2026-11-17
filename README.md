@@ -2,6 +2,9 @@
 
 Objetos perdidos ESCOM
 
+La configuración, migración SQL y pruebas de autenticación están en
+[la guía de Supabase](docs/supabase.md).
+
 ## Getting Started
 
 This project is a starting point for a Flutter application.
