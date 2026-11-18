@@ -8,6 +8,9 @@ La configuración, migración SQL y pruebas de autenticación están en
 La pantalla principal, navegación y límites de la fase 2 están en
 [la guía de navegación](docs/home_navigation.md).
 
+La fase 3, sus migraciones manuales, permisos de Storage y pruebas con dos cuentas
+están en [publicaciones con Supabase](docs/found_items_supabase.md).
+
 ## Getting Started
 
 This project is a starting point for a Flutter application.

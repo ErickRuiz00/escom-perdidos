@@ -1,274 +1,251 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-
 import '../../core/constants/escom.dart';
 import '../../core/errors/app_exception.dart';
-import '../../core/theme/app_status_colors.dart';
 import '../../core/utils/formatters.dart';
 import '../../data/models/report.dart';
-import '../../data/services/location_service.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 import '../../viewmodels/reports_viewmodel.dart';
 import '../widgets/common.dart';
-import '../widgets/local_only_notice.dart';
 import 'report_form_view.dart';
 
-/// Vista detallada de un reporte (RF2) con acciones de editar, resolver y eliminar.
-class ReportDetailView extends StatelessWidget {
+class ReportDetailView extends StatefulWidget {
   const ReportDetailView({super.key, required this.reportId});
-
   final String reportId;
+  @override
+  State<ReportDetailView> createState() => _ReportDetailViewState();
+}
+
+class _ReportDetailViewState extends State<ReportDetailView> {
+  bool _loading = true;
+  bool _withdrawing = false;
+  String? _error;
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _reload();
+    });
+  }
+
+  Future<void> _reload() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      await context.read<ReportsViewModel>().loadDetail(widget.reportId);
+    } catch (e) {
+      if (mounted) _error = userMessageFor(e);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _withdraw(Report report) async {
+    if (_withdrawing) return;
+    final ok = await confirmAction(
+      context,
+      title: '¿Retirar publicación?',
+      message:
+          'Dejará de aparecer en el catálogo de la comunidad. La conservarás en Mis hallazgos y no podrás reactivarla.',
+      confirmLabel: 'Retirar',
+    );
+    if (!ok || !mounted) return;
+    setState(() => _withdrawing = true);
+    try {
+      await context.read<ReportsViewModel>().withdraw(report);
+      if (mounted) showSnack(context, 'Publicación retirada');
+    } catch (e) {
+      if (mounted) showSnack(context, userMessageFor(e), error: true);
+    } finally {
+      if (mounted) setState(() => _withdrawing = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final report = context.select<ReportsViewModel, Report?>(
-      (vm) => vm.byId(reportId),
-    );
-    final userId = context.select<AuthViewModel, String?>((a) => a.user?.id);
-
-    if (report == null) {
-      return Scaffold(
-        appBar: AppBar(),
-        body: const EmptyState(
-          icon: Icons.inventory_2_outlined,
-          title: 'Reporte no disponible',
-          message: 'Es posible que haya sido eliminado.',
-        ),
-      );
-    }
-
-    final isOwner = report.userId == userId;
+    final report = context.watch<ReportsViewModel>().byId(widget.reportId);
+    final owner = report?.userId == context.watch<AuthViewModel>().user?.id;
     final theme = Theme.of(context);
-    final width = MediaQuery.sizeOf(context).width;
-
     return Scaffold(
-      body: CustomScrollView(
-        slivers: [
-          SliverAppBar(
-            pinned: true,
-            expandedHeight: (width * 0.75).clamp(220, 380),
-            actions: [
-              if (isOwner)
-                IconButton(
-                  tooltip: 'Editar',
-                  icon: const Icon(Icons.edit_rounded),
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => ReportFormView(original: report),
-                    ),
-                  ),
-                ),
-              if (isOwner)
-                IconButton(
-                  tooltip: 'Eliminar',
-                  icon: const Icon(Icons.delete_outline_rounded),
-                  onPressed: () => _delete(context, report),
-                ),
-            ],
-            flexibleSpace: FlexibleSpaceBar(
-              background: Hero(
-                tag: 'photo-${report.id}',
-                child: ReportImage(
-                  path: report.photoPath,
-                  category: report.category,
-                  decodeWidth: width.round(),
-                  iconSize: 96,
-                ),
-              ),
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: ConstrainedContent(
-              maxWidth: 680,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (isOwner) ...[
-                      const LocalOnlyNotice(),
-                      const SizedBox(height: 16),
-                    ],
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        TypeBadge(type: report.type),
-                        LocationTag(location: report.location),
-                        Chip(
-                          visualDensity: VisualDensity.compact,
-                          avatar: Icon(report.category.icon, size: 16),
-                          label: Text(report.category.label),
-                        ),
-                        if (!report.isActive)
-                          const StatusBadge(
-                            state: ItemVisualState.delivered,
-                            label: 'Resuelto',
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      report.title,
-                      style: theme.textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(report.description, style: theme.textTheme.bodyLarge),
-                    const SizedBox(height: 20),
-                    Card(
-                      child: Column(
-                        children: [
-                          _InfoTile(
-                            icon: Icons.place_outlined,
-                            title: 'Lugar',
-                            value: report.location,
-                          ),
-                          _InfoTile(
-                            icon: Icons.event_outlined,
-                            title: report.type == ReportType.lost
-                                ? 'Se perdió el'
-                                : 'Se encontró el',
-                            value: Formatters.date(report.eventDate),
-                          ),
-                          if (report.hasLocation)
-                            _InfoTile(
-                              icon: Icons.my_location_rounded,
-                              title: 'Ubicación GPS',
-                              value: _gpsLabel(report),
-                            ),
-                          _InfoTile(
-                            icon: Icons.person_outline_rounded,
-                            title: 'Registrado por',
-                            value:
-                                '${isOwner ? 'Ti' : report.authorName ?? 'Usuario'} · ${Formatters.relative(report.createdAt)}',
-                          ),
-                          _InfoTile(
-                            icon:
-                                report.custody?.icon ??
-                                Icons.help_outline_rounded,
-                            title: 'Custodia',
-                            value: report.custody?.label ?? 'Sin especificar',
-                          ),
-                          if (report.contact?.isNotEmpty ?? false)
-                            _InfoTile(
-                              icon: Icons.contact_phone_outlined,
-                              title: 'Contacto',
-                              value: report.contact!,
-                              trailing: IconButton(
-                                tooltip: 'Copiar',
-                                icon: const Icon(Icons.copy_rounded),
-                                onPressed: () {
-                                  Clipboard.setData(
-                                    ClipboardData(text: report.contact!),
-                                  );
-                                  showSnack(context, 'Contacto copiado');
-                                },
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    if (isOwner)
-                      FilledButton.icon(
-                        onPressed: () => _toggle(context, report),
-                        icon: Icon(
-                          report.isActive
-                              ? Icons.task_alt_rounded
-                              : Icons.replay_rounded,
-                        ),
-                        label: Text(
-                          report.isActive
-                              ? 'Marcar como resuelto'
-                              : 'Reactivar reporte',
-                        ),
-                      )
-                    else if (report.isActive)
-                      Text(
-                        report.contact?.isNotEmpty ?? false
-                            ? '¿Es tuyo o lo viste? Usa el contacto de arriba.'
-                            : 'Acude al Edificio de Gobierno para más información.',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ),
+      appBar: AppBar(
+        title: const Text('Detalle del hallazgo'),
+        actions: [
+          IconButton(
+            tooltip: 'Actualizar detalle',
+            onPressed: _loading || _withdrawing ? null : _reload,
+            icon: const Icon(Icons.refresh_rounded),
           ),
         ],
       ),
-    );
-  }
-
-  String _gpsLabel(Report report) {
-    final point = GeoPoint(report.latitude!, report.longitude!);
-    final where = point.insideCampus
-        ? 'Dentro del campus'
-        : 'A ${Formatters.distance(point.distanceToEscom)} de la ESCOM';
-    return '$where (${report.latitude!.toStringAsFixed(5)}, ${report.longitude!.toStringAsFixed(5)})';
-  }
-
-  Future<void> _toggle(BuildContext context, Report report) async {
-    try {
-      await context.read<ReportsViewModel>().toggleResolved(report);
-      if (context.mounted) {
-        showSnack(
-          context,
-          report.isActive
-              ? '¡Qué bien! Reporte marcado como resuelto.'
-              : 'Reporte reactivado.',
-        );
-      }
-    } catch (e) {
-      if (context.mounted) showSnack(context, userMessageFor(e), error: true);
-    }
-  }
-
-  Future<void> _delete(BuildContext context, Report report) async {
-    final confirmed = await confirmAction(
-      context,
-      title: '¿Eliminar reporte?',
-      message:
-          'Se borrará "${report.title}" y su foto. Esta acción no se puede deshacer.',
-    );
-    if (!confirmed || !context.mounted) return;
-    final vm = context.read<ReportsViewModel>();
-    final navigator = Navigator.of(context);
-    try {
-      await vm.delete(report);
-      navigator.pop();
-      if (context.mounted) showSnack(context, 'Reporte eliminado');
-    } catch (e) {
-      if (context.mounted) showSnack(context, userMessageFor(e), error: true);
-    }
-  }
-}
-
-class _InfoTile extends StatelessWidget {
-  const _InfoTile({
-    required this.icon,
-    required this.title,
-    required this.value,
-    this.trailing,
-  });
-
-  final IconData icon;
-  final String title;
-  final String value;
-  final Widget? trailing;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      leading: Icon(icon),
-      title: Text(title, style: Theme.of(context).textTheme.labelMedium),
-      subtitle: Text(value, style: Theme.of(context).textTheme.bodyLarge),
-      trailing: trailing,
+      body: SafeArea(
+        top: false,
+        child: _loading && report == null
+            ? const Center(child: CircularProgressIndicator())
+            : SingleChildScrollView(
+                child: ConstrainedContent(
+                  maxWidth: 720,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (_error != null)
+                        EmptyState(
+                          icon: Icons.cloud_off_outlined,
+                          title: 'No pudimos actualizar el hallazgo',
+                          message: _error!,
+                          action: TextButton(
+                            onPressed: _reload,
+                            child: const Text('Reintentar'),
+                          ),
+                        ),
+                      if (report == null && _error == null)
+                        const EmptyState(
+                          icon: Icons.inventory_2_outlined,
+                          title: 'Publicación no disponible',
+                          message:
+                              'Puede haber sido retirada o ya no ser visible para tu cuenta.',
+                        ),
+                      if (report != null) ...[
+                        Hero(
+                          tag: 'photo-${report.id}',
+                          child: AspectRatio(
+                            aspectRatio: 16 / 10,
+                            child: ReportImage(
+                              path: null,
+                              storagePath: report.photoObjectPath,
+                              category: report.category,
+                              decodeWidth: 720,
+                              iconSize: 80,
+                            ),
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  Chip(label: Text(report.status.label)),
+                                  LocationTag(location: report.location),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                report.title,
+                                style: theme.textTheme.headlineSmall?.copyWith(
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                report.description,
+                                style: theme.textTheme.bodyLarge,
+                              ),
+                              const SizedBox(height: 20),
+                              Card(
+                                child: Column(
+                                  children: [
+                                    ListTile(
+                                      leading: Icon(report.category.icon),
+                                      title: const Text('Categoría'),
+                                      subtitle: Text(report.category.label),
+                                    ),
+                                    ListTile(
+                                      leading: const Icon(
+                                        Icons.calendar_month_outlined,
+                                      ),
+                                      title: const Text('Fecha del hallazgo'),
+                                      subtitle: Text(
+                                        Formatters.date(report.eventDate),
+                                      ),
+                                    ),
+                                    ListTile(
+                                      leading: Icon(report.custody?.icon),
+                                      title: const Text('Custodia'),
+                                      subtitle: Text(
+                                        report.custody?.label ??
+                                            'Sin especificar',
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 20),
+                              if (report.custody == ItemCustody.prefecture)
+                                Container(
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    color: theme.colorScheme.secondaryContainer,
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                  child: Text(
+                                    'Reportado como entregado a Prefectura.\n\n${owner ? 'Tu responsabilidad de coordinar la devolución termina aquí. ' : ''}Acude personalmente a Prefectura de ESCOM para consultar el objeto. Esta información es una declaración del alumno; Prefectura no ha confirmado su recepción.',
+                                    style: TextStyle(
+                                      color: theme
+                                          .colorScheme
+                                          .onSecondaryContainer,
+                                    ),
+                                  ),
+                                ),
+                              if (!owner &&
+                                  report.isActive &&
+                                  report.custody == ItemCustody.student) ...[
+                                const FilledButton(
+                                  onPressed: null,
+                                  child: Text('Creo que es mío'),
+                                ),
+                                const SizedBox(height: 8),
+                                const Text(
+                                  'Las solicitudes al alumno que lo resguarda estarán disponibles más adelante.',
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
+                              if (owner && report.isActive) ...[
+                                const SizedBox(height: 16),
+                                OutlinedButton.icon(
+                                  onPressed: _loading || _withdrawing
+                                      ? null
+                                      : () async {
+                                          await Navigator.of(
+                                            context,
+                                          ).push<String>(
+                                            MaterialPageRoute(
+                                              builder: (_) => ReportFormView(
+                                                original: report,
+                                              ),
+                                            ),
+                                          );
+                                          if (mounted) _reload();
+                                        },
+                                  icon: const Icon(Icons.edit_outlined),
+                                  label: const Text('Editar publicación'),
+                                ),
+                                const SizedBox(height: 12),
+                                TextButton.icon(
+                                  onPressed: _loading || _withdrawing
+                                      ? null
+                                      : () => _withdraw(report),
+                                  icon: const Icon(Icons.archive_outlined),
+                                  label: Text(
+                                    _withdrawing
+                                        ? 'Retirando…'
+                                        : 'Retirar publicación',
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+      ),
     );
   }
 }

@@ -8,7 +8,7 @@ import 'core/theme/app_theme.dart';
 import 'data/local/app_database.dart';
 import 'data/local/secure_store.dart';
 import 'data/repositories/auth_repository.dart';
-import 'data/repositories/report_repository.dart';
+import 'data/repositories/found_items_repository.dart';
 import 'data/repositories/weather_repository.dart';
 import 'data/services/api_client.dart';
 import 'data/services/location_service.dart';
@@ -69,12 +69,10 @@ class EscomPerdidosApp extends StatelessWidget {
             notifications: notifications,
           ),
         ),
-        ChangeNotifierProvider(
-          create: (context) => ReportsViewModel(
-            repository: ReportRepository(database),
-            notifications: notifications,
-            media: context.read<MediaService>(),
-          ),
+        ChangeNotifierProxyProvider<AuthViewModel, ReportsViewModel>(
+          create: (context) =>
+              ReportsViewModel(repository: FoundItemsRepository(supabase)),
+          update: (_, auth, reports) => reports!..bindUser(auth.user?.id),
         ),
         ChangeNotifierProvider(
           create: (_) => WeatherViewModel(

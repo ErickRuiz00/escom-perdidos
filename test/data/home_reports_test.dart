@@ -1,54 +1,25 @@
 import 'dart:io';
 
 import 'package:escom_perdidos/core/constants/escom.dart';
-import 'package:escom_perdidos/core/errors/app_exception.dart';
 import 'package:escom_perdidos/data/local/app_database.dart';
 import 'package:escom_perdidos/data/local/seed_data.dart';
 import 'package:escom_perdidos/data/models/report.dart';
 import 'package:escom_perdidos/data/models/user.dart';
 import 'package:escom_perdidos/data/repositories/report_repository.dart';
-import 'package:escom_perdidos/data/services/media_service.dart';
-import 'package:escom_perdidos/data/services/notification_service.dart';
-import 'package:escom_perdidos/viewmodels/reports_viewmodel.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../helpers.dart';
 
-class _Notifications extends NotificationService {
-  int sent = 0;
-  @override
-  Future<void> show({required String title, required String body}) async {
-    sent++;
-  }
-
-  @override
-  Future<void> schedule({
-    required int id,
-    required String title,
-    required String body,
-    required DateTime when,
-  }) async {
-    sent++;
-  }
-}
-
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   test(
-    'guardar hallazgo conserva custodia, no publica muestras ni envía avisos',
+    'se conserva la compatibilidad de custodia en SQLite heredado',
     () async {
       final db = memoryDatabase();
       addTearDown(db.close);
       await SeedData.ensure(db);
-      final notifications = _Notifications();
       final repository = ReportRepository(db);
-      final vm = ReportsViewModel(
-        repository: repository,
-        notifications: notifications,
-        media: MediaService(),
-      );
-      addTearDown(vm.dispose);
       final user = AppUser(
         id: 'remote-user',
         name: 'Ana',
@@ -71,21 +42,13 @@ void main() {
         updatedAt: DateTime(2026),
         custody: ItemCustody.prefecture,
       );
-      await vm.create(report, user);
+      await repository.create(report);
       expect(
         (await repository.findById(report.id))!.custody,
         ItemCustody.prefecture,
       );
-      expect(vm.mine(user.id).single.id, report.id);
       expect(await repository.fetchAll(), hasLength(7));
-      expect(vm.communityFound, isEmpty);
-      expect(notifications.sent, 0);
-      await expectLater(
-        vm.create(report.copyWith(type: ReportType.lost), user),
-        throwsA(isA<AppException>()),
-      );
-      expect(await repository.fetchAll(), hasLength(7));
-      await vm.update(report.copyWith(custody: ItemCustody.student));
+      await repository.update(report.copyWith(custody: ItemCustody.student));
       expect(
         (await repository.findById(report.id))!.custody,
         ItemCustody.student,

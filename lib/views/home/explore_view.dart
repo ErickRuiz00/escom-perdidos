@@ -112,6 +112,17 @@ class _ExploreViewState extends State<ExploreView> {
                                   ),
                                 ),
                               ),
+                            if (_filter.foundFrom != null ||
+                                _filter.foundTo != null)
+                              InputChip(
+                                label: const Text('Fecha del hallazgo'),
+                                onDeleted: () => setState(
+                                  () => _filter = _filter.copyWith(
+                                    foundFrom: () => null,
+                                    foundTo: () => null,
+                                  ),
+                                ),
+                              ),
                           ],
                         ),
                         const SizedBox(height: 16),
@@ -147,6 +158,9 @@ class _ExploreViewState extends State<ExploreView> {
                         ),
                         const SizedBox(height: 24),
                         CommunityResults(
+                          key: ValueKey(
+                            '${value.text}/${_filter.category}/${_filter.location}/${_filter.status}/${_filter.sort}/${_filter.foundFrom}/${_filter.foundTo}',
+                          ),
                           reports: _filter
                               .copyWith(query: value.text)
                               .apply(

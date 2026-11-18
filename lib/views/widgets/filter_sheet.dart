@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/constants/escom.dart';
 import '../../data/models/report_filter.dart';
+import '../../core/utils/formatters.dart';
 
 /// Hoja inferior para filtrar por categoría, estado y lugar, y para ordenar.
 Future<ReportFilter?> showFilterSheet(
@@ -43,6 +44,49 @@ class _FilterSheetState extends State<_FilterSheet> {
               padding: const EdgeInsets.symmetric(horizontal: 20),
               children: [
                 Text('Filtros y orden', style: theme.textTheme.titleLarge),
+                _section('Fecha del hallazgo'),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.date_range_outlined),
+                  title: Text(
+                    _filter.foundFrom == null
+                        ? 'Todas las fechas'
+                        : '${Formatters.date(_filter.foundFrom!)} – ${Formatters.date(_filter.foundTo!)}',
+                  ),
+                  trailing: _filter.foundFrom == null
+                      ? null
+                      : IconButton(
+                          tooltip: 'Quitar fechas',
+                          icon: const Icon(Icons.close_rounded),
+                          onPressed: () => setState(
+                            () => _filter = _filter.copyWith(
+                              foundFrom: () => null,
+                              foundTo: () => null,
+                            ),
+                          ),
+                        ),
+                  onTap: () async {
+                    final range = await showDateRangePicker(
+                      context: context,
+                      firstDate: DateTime(2020),
+                      lastDate: DateTime.now(),
+                      initialDateRange: _filter.foundFrom == null
+                          ? null
+                          : DateTimeRange(
+                              start: _filter.foundFrom!,
+                              end: _filter.foundTo!,
+                            ),
+                    );
+                    if (range != null && mounted) {
+                      setState(
+                        () => _filter = _filter.copyWith(
+                          foundFrom: () => range.start,
+                          foundTo: () => range.end,
+                        ),
+                      );
+                    }
+                  },
+                ),
                 _section('Ordenar por'),
                 _chips<ReportSort>(
                   values: ReportSort.values,
