@@ -15,15 +15,13 @@ class ReportsViewModel extends ChangeNotifier {
     required ReportRepository repository,
     required NotificationService notifications,
     required MediaService media,
-  })  : _repository = repository,
-        _notifications = notifications,
-        _media = media;
+  }) : _repository = repository,
+       _notifications = notifications,
+       _media = media;
 
   final ReportRepository _repository;
   final NotificationService _notifications;
   final MediaService _media;
-
-  static const reminderDelay = Duration(days: 3);
 
   List<Report> _all = const [];
   ReportFilter _filter = const ReportFilter();
@@ -35,6 +33,10 @@ class ReportsViewModel extends ChangeNotifier {
   List<Report> get visible => _visible;
   bool get loading => _loading;
   String? get error => _error;
+
+  /// El catálogo público todavía no tiene fuente remota. Nunca se mezclan los
+  /// registros de SQLite (incluidas muestras antiguas) con publicaciones reales.
+  List<Report> get communityFound => const [];
 
   List<Report> mine(String userId) =>
       _all.where((r) => r.userId == userId).toList(growable: false);
@@ -72,37 +74,19 @@ class ReportsViewModel extends ChangeNotifier {
 
   void search(String query) => updateFilter(_filter.copyWith(query: query));
 
-  /// Crea el reporte, avisa al usuario y busca posibles coincidencias.
+  /// Guarda un hallazgo local. No publica, notifica ni busca coincidencias.
   Future<void> create(Report report, AppUser author) async {
+    if (report.type != ReportType.found) {
+      throw const AppException('Solo puedes registrar objetos encontrados.');
+    }
     await _repository.create(report);
     await load();
-    if (!author.notificationsEnabled) return;
-
-    await _notifications.show(
-      title: 'Reporte publicado',
-      body: '"${report.title}" ya es visible para la comunidad ESCOM.',
-    );
-    final matches = await _repository.findMatches(report);
-    if (matches.isNotEmpty) {
-      final first = matches.first;
-      await _notifications.show(
-        title: '¡Posible coincidencia!',
-        body: matches.length == 1
-            ? '"${first.title}" (${first.type.label.toLowerCase()}) en ${first.location}.'
-            : 'Hay ${matches.length} reportes de ${report.category.label.toLowerCase()} que podrían ser tuyos.',
-      );
-    }
-    if (report.type == ReportType.lost) {
-      await _notifications.schedule(
-        id: NotificationService.idFor(report.id),
-        title: '¿Ya recuperaste tu objeto?',
-        body: 'Si encontraste "${report.title}", márcalo como resuelto.',
-        when: DateTime.now().add(reminderDelay),
-      );
-    }
   }
 
   Future<void> update(Report report, {String? replacedPhoto}) async {
+    if (report.type != ReportType.found) {
+      throw const AppException('Solo puedes registrar objetos encontrados.');
+    }
     await _repository.update(report);
     if (replacedPhoto != null && replacedPhoto != report.photoPath) {
       await _media.deleteImage(replacedPhoto);
@@ -112,11 +96,15 @@ class ReportsViewModel extends ChangeNotifier {
 
   Future<void> toggleResolved(Report report) async {
     final resolved = report.isActive;
-    await _repository.update(report.copyWith(
-      status: resolved ? ReportStatus.resolved : ReportStatus.active,
-      updatedAt: DateTime.now(),
-    ));
-    if (resolved) await _notifications.cancel(NotificationService.idFor(report.id));
+    await _repository.update(
+      report.copyWith(
+        status: resolved ? ReportStatus.resolved : ReportStatus.active,
+        updatedAt: DateTime.now(),
+      ),
+    );
+    if (resolved) {
+      await _notifications.cancel(NotificationService.idFor(report.id));
+    }
     await load();
   }
 

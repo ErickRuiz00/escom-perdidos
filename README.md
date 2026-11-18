@@ -5,6 +5,9 @@ Objetos perdidos ESCOM
 La configuración, migración SQL y pruebas de autenticación están en
 [la guía de Supabase](docs/supabase.md).
 
+La pantalla principal, navegación y límites de la fase 2 están en
+[la guía de navegación](docs/home_navigation.md).
+
 ## Getting Started
 
 This project is a starting point for a Flutter application.

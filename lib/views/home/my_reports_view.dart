@@ -10,7 +10,7 @@ import '../widgets/common.dart';
 import '../widgets/report_card.dart';
 import '../widgets/skeleton.dart';
 
-/// Reportes publicados por el usuario, separados por estado.
+/// Hallazgos locales del usuario, separados por estado.
 class MyReportsView extends StatelessWidget {
   const MyReportsView({super.key, required this.onNewReport});
 
@@ -20,29 +20,33 @@ class MyReportsView extends StatelessWidget {
   Widget build(BuildContext context) {
     final vm = context.watch<ReportsViewModel>();
     final userId = context.select<AuthViewModel, String?>((a) => a.user?.id);
-    final mine = userId == null ? const <Report>[] : vm.mine(userId);
+    final mine = userId == null
+        ? const <Report>[]
+        : vm.mine(userId).where((r) => r.type == ReportType.found).toList();
 
     Widget tab(ReportStatus status) {
       if (vm.loading && mine.isEmpty) return const ReportListSkeleton(count: 3);
       final items = mine.where((r) => r.status == status).toList();
       if (items.isEmpty) {
-        return EmptyState(
-          icon: status == ReportStatus.active
-              ? Icons.inventory_2_outlined
-              : Icons.task_alt_rounded,
-          title: status == ReportStatus.active
-              ? 'No tienes reportes activos'
-              : 'Nada resuelto todavía',
-          message: status == ReportStatus.active
-              ? 'Cuando pierdas o encuentres algo, repórtalo aquí.'
-              : 'Los reportes que marques como resueltos aparecerán aquí.',
-          action: status == ReportStatus.active
-              ? FilledButton.tonalIcon(
-                  onPressed: onNewReport,
-                  icon: const Icon(Icons.add_rounded),
-                  label: const Text('Nuevo reporte'),
-                )
-              : null,
+        return SingleChildScrollView(
+          child: EmptyState(
+            icon: status == ReportStatus.active
+                ? Icons.inventory_2_outlined
+                : Icons.task_alt_rounded,
+            title: status == ReportStatus.active
+                ? 'No tienes hallazgos guardados'
+                : 'Nada resuelto todavía',
+            message: status == ReportStatus.active
+                ? 'Los hallazgos que guardes en este dispositivo aparecerán aquí. Aún no son publicaciones públicas.'
+                : 'Los reportes que marques como resueltos aparecerán aquí.',
+            action: status == ReportStatus.active
+                ? FilledButton.tonalIcon(
+                    onPressed: onNewReport,
+                    icon: const Icon(Icons.add_rounded),
+                    label: const Text('Registrar hallazgo'),
+                  )
+                : null,
+          ),
         );
       }
       return RefreshIndicator(
@@ -50,9 +54,9 @@ class MyReportsView extends StatelessWidget {
         child: ReportList(
           reports: items,
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-          onTap: (r) => Navigator.of(context).push(MaterialPageRoute(
-            builder: (_) => ReportDetailView(reportId: r.id),
-          )),
+          onTap: (r) => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => ReportDetailView(reportId: r.id)),
+          ),
         ),
       );
     }
@@ -61,16 +65,32 @@ class MyReportsView extends StatelessWidget {
       length: 2,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Mis reportes'),
-          bottom: TabBar(tabs: [
-            Tab(text: 'Activos (${mine.where((r) => r.isActive).length})'),
-            Tab(text: 'Resueltos (${mine.where((r) => !r.isActive).length})'),
-          ]),
+          title: const Text('Mis hallazgos'),
+          bottom: TabBar(
+            tabs: [
+              Tab(text: 'Activos (${mine.where((r) => r.isActive).length})'),
+              Tab(text: 'Resueltos (${mine.where((r) => !r.isActive).length})'),
+            ],
+          ),
         ),
-        body: TabBarView(children: [
-          tab(ReportStatus.active),
-          tab(ReportStatus.resolved),
-        ]),
+        body: vm.error != null
+            ? SingleChildScrollView(
+                child: EmptyState(
+                  icon: Icons.error_outline_rounded,
+                  title: 'No pudimos leer tus hallazgos',
+                  message: vm.error!,
+                  action: TextButton(
+                    onPressed: vm.load,
+                    child: const Text('Reintentar'),
+                  ),
+                ),
+              )
+            : TabBarView(
+                children: [
+                  tab(ReportStatus.active),
+                  tab(ReportStatus.resolved),
+                ],
+              ),
       ),
     );
   }

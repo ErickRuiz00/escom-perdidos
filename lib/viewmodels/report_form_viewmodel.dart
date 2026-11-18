@@ -17,18 +17,17 @@ class ReportFormViewModel extends ChangeNotifier {
     required LocationService location,
     required this.author,
     this.original,
-    ReportType? initialType,
-  })  : _reports = reports,
-        _media = media,
-        _location = location,
-        type = original?.type ?? initialType ?? ReportType.lost,
-        category = original?.category ?? ItemCategory.electronics,
-        place = original?.location ?? Escom.locations.first,
-        eventDate = original?.eventDate ?? DateTime.now(),
-        photoPath = original?.photoPath,
-        point = original?.hasLocation == true
-            ? GeoPoint(original!.latitude!, original.longitude!)
-            : null;
+  }) : _reports = reports,
+       _media = media,
+       _location = location,
+       custody = original?.custody ?? ItemCustody.student,
+       category = original?.category ?? ItemCategory.electronics,
+       place = original?.location ?? Escom.locations.first,
+       eventDate = original?.eventDate ?? DateTime.now(),
+       photoPath = original?.photoPath,
+       point = original?.hasLocation == true
+           ? GeoPoint(original!.latitude!, original.longitude!)
+           : null;
 
   final ReportsViewModel _reports;
   final MediaService _media;
@@ -36,7 +35,8 @@ class ReportFormViewModel extends ChangeNotifier {
   final AppUser author;
   final Report? original;
 
-  ReportType type;
+  ReportType get type => ReportType.found;
+  ItemCustody custody;
   ItemCategory category;
   String place;
   DateTime eventDate;
@@ -51,7 +51,7 @@ class ReportFormViewModel extends ChangeNotifier {
   bool get saving => _saving;
   bool get locating => _locating;
 
-  void setType(ReportType value) => _set(() => type = value);
+  void setCustody(ItemCustody value) => _set(() => custody = value);
   void setCategory(ItemCategory value) => _set(() => category = value);
   void setPlace(String value) => _set(() => place = value);
   void setEventDate(DateTime value) => _set(() => eventDate = value);
@@ -92,13 +92,16 @@ class ReportFormViewModel extends ChangeNotifier {
     _set(() => _saving = true);
     try {
       final now = DateTime.now();
-      final cleanContact = contact?.trim().isEmpty ?? true ? null : contact!.trim();
+      final cleanContact = contact?.trim().isEmpty ?? true
+          ? null
+          : contact!.trim();
       if (original == null) {
         await _reports.create(
           Report(
             id: const Uuid().v4(),
             userId: author.id,
             type: type,
+            custody: custody,
             title: title,
             description: description,
             category: category,
@@ -118,6 +121,7 @@ class ReportFormViewModel extends ChangeNotifier {
         await _reports.update(
           original!.copyWith(
             type: type,
+            custody: custody,
             title: title,
             description: description,
             category: category,

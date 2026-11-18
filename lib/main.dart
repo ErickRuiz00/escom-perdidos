@@ -5,7 +5,6 @@ import 'app.dart';
 import 'core/errors/error_handler.dart';
 import 'data/local/app_database.dart';
 import 'data/local/secure_store.dart';
-import 'data/local/seed_data.dart';
 import 'data/services/notification_service.dart';
 import 'data/services/supabase_service.dart';
 import 'data/services/auth_link_service.dart';
@@ -24,11 +23,6 @@ Future<void> main() async {
     final database = AppDatabase();
     final notifications = NotificationService();
     await notifications.init();
-    try {
-      await SeedData.ensure(database);
-    } catch (e) {
-      debugPrint('No se pudieron cargar los datos de ejemplo: $e');
-    }
 
     runApp(
       EscomPerdidosApp(

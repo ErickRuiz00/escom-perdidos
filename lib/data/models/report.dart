@@ -19,6 +19,7 @@ class Report {
     this.longitude,
     this.contact,
     this.authorName,
+    this.custody,
   });
 
   final String id;
@@ -45,6 +46,7 @@ class Report {
 
   /// Nombre del autor (se obtiene con un JOIN, no se guarda en la tabla).
   final String? authorName;
+  final ItemCustody? custody;
 
   bool get hasLocation => latitude != null && longitude != null;
   bool get isActive => status == ReportStatus.active;
@@ -62,6 +64,7 @@ class Report {
     double? latitude,
     double? longitude,
     String? contact,
+    ItemCustody? custody,
     bool clearPhoto = false,
     bool clearCoordinates = false,
   }) {
@@ -82,6 +85,7 @@ class Report {
       longitude: clearCoordinates ? null : (longitude ?? this.longitude),
       contact: contact ?? this.contact,
       authorName: authorName,
+      custody: custody ?? this.custody,
     );
   }
 
@@ -103,24 +107,30 @@ class Report {
       longitude: (map['longitude'] as num?)?.toDouble(),
       contact: map['contact'] as String?,
       authorName: map['author_name'] as String?,
+      custody: switch (map['custody']) {
+        'student' => ItemCustody.student,
+        'prefecture' => ItemCustody.prefecture,
+        _ => null,
+      },
     );
   }
 
   Map<String, Object?> toMap() => {
-        'id': id,
-        'user_id': userId,
-        'type': type.name,
-        'title': title.trim(),
-        'description': description.trim(),
-        'category': category.name,
-        'location': location,
-        'event_date': eventDate.millisecondsSinceEpoch,
-        'status': status.name,
-        'created_at': createdAt.millisecondsSinceEpoch,
-        'updated_at': updatedAt.millisecondsSinceEpoch,
-        'photo_path': photoPath,
-        'latitude': latitude,
-        'longitude': longitude,
-        'contact': contact?.trim(),
-      };
+    'id': id,
+    'user_id': userId,
+    'type': type.name,
+    'title': title.trim(),
+    'description': description.trim(),
+    'category': category.name,
+    'location': location,
+    'event_date': eventDate.millisecondsSinceEpoch,
+    'status': status.name,
+    'created_at': createdAt.millisecondsSinceEpoch,
+    'updated_at': updatedAt.millisecondsSinceEpoch,
+    'photo_path': photoPath,
+    'latitude': latitude,
+    'longitude': longitude,
+    'contact': contact?.trim(),
+    'custody': custody?.name,
+  };
 }

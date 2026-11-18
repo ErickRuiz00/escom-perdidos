@@ -11,6 +11,7 @@ import '../../data/services/location_service.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 import '../../viewmodels/reports_viewmodel.dart';
 import '../widgets/common.dart';
+import '../widgets/local_only_notice.dart';
 import 'report_form_view.dart';
 
 /// Vista detallada de un reporte (RF2) con acciones de editar, resolver y eliminar.
@@ -85,6 +86,10 @@ class ReportDetailView extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (isOwner) ...[
+                      const LocalOnlyNotice(),
+                      const SizedBox(height: 16),
+                    ],
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
@@ -136,9 +141,16 @@ class ReportDetailView extends StatelessWidget {
                             ),
                           _InfoTile(
                             icon: Icons.person_outline_rounded,
-                            title: 'Publicado por',
+                            title: 'Registrado por',
                             value:
                                 '${isOwner ? 'Ti' : report.authorName ?? 'Usuario'} · ${Formatters.relative(report.createdAt)}',
+                          ),
+                          _InfoTile(
+                            icon:
+                                report.custody?.icon ??
+                                Icons.help_outline_rounded,
+                            title: 'Custodia',
+                            value: report.custody?.label ?? 'Sin especificar',
                           ),
                           if (report.contact?.isNotEmpty ?? false)
                             _InfoTile(

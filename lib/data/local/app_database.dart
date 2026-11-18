@@ -7,11 +7,11 @@ import 'package:sqflite/sqflite.dart';
 /// consultar sin conexión a internet.
 class AppDatabase {
   AppDatabase({DatabaseFactory? factory, String? path})
-      : _factory = factory ?? databaseFactory,
-        _path = path;
+    : _factory = factory ?? databaseFactory,
+      _path = path;
 
   static const _name = 'escom_perdidos.db';
-  static const _version = 1;
+  static const _version = 2;
 
   final DatabaseFactory _factory;
   final String? _path;
@@ -27,6 +27,11 @@ class AppDatabase {
         version: _version,
         onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
         onCreate: _onCreate,
+        onUpgrade: (db, oldVersion, newVersion) async {
+          if (oldVersion < 2) {
+            await db.execute('ALTER TABLE reports ADD COLUMN custody TEXT');
+          }
+        },
       ),
     );
   }
@@ -67,6 +72,7 @@ class AppDatabase {
         latitude REAL,
         longitude REAL,
         contact TEXT,
+        custody TEXT,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       )

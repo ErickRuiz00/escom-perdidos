@@ -74,3 +74,13 @@ enum ReportStatus {
   static ReportStatus fromName(String name) =>
       values.firstWhere((s) => s.name == name, orElse: () => active);
 }
+
+/// Responsable actual del hallazgo. No representa una entrega verificada.
+enum ItemCustody {
+  student('Alumno', Icons.person_outline_rounded),
+  prefecture('Prefectura', Icons.account_balance_outlined);
+
+  const ItemCustody(this.label, this.icon);
+  final String label;
+  final IconData icon;
+}

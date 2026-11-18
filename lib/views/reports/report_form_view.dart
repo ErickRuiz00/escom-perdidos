@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/escom.dart';
-import '../../core/theme/app_status_colors.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/utils/validators.dart';
 import '../../data/models/report.dart';
@@ -13,13 +12,13 @@ import '../../viewmodels/report_form_viewmodel.dart';
 import '../../viewmodels/reports_viewmodel.dart';
 import '../auth/auth_widgets.dart';
 import '../widgets/common.dart';
+import '../widgets/local_only_notice.dart';
 
 /// Formulario para crear (o editar, si recibe [original]) un reporte.
 class ReportFormView extends StatelessWidget {
-  const ReportFormView({super.key, this.original, this.initialType});
+  const ReportFormView({super.key, this.original});
 
   final Report? original;
-  final ReportType? initialType;
 
   @override
   Widget build(BuildContext context) {
@@ -30,7 +29,6 @@ class ReportFormView extends StatelessWidget {
         location: context.read<LocationService>(),
         author: context.read<AuthViewModel>().user!,
         original: original,
-        initialType: initialType,
       ),
       child: _ReportForm(original: original),
     );
@@ -83,7 +81,9 @@ class _ReportFormState extends State<_ReportForm> {
     _saved = true;
     showSnack(
       context,
-      vm.isEditing ? 'Cambios guardados' : 'Reporte publicado',
+      vm.isEditing
+          ? 'Cambios guardados en este dispositivo'
+          : 'Hallazgo guardado en este dispositivo',
     );
     Navigator.pop(context);
   }
@@ -117,7 +117,6 @@ class _ReportFormState extends State<_ReportForm> {
   Widget build(BuildContext context) {
     final vm = context.watch<ReportFormViewModel>();
     final theme = Theme.of(context);
-    final lost = vm.type == ReportType.lost;
 
     return PopScope(
       onPopInvokedWithResult: (didPop, _) {
@@ -125,7 +124,7 @@ class _ReportFormState extends State<_ReportForm> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: Text(vm.isEditing ? 'Editar reporte' : 'Nuevo reporte'),
+          title: Text(vm.isEditing ? 'Editar hallazgo' : 'Publicar hallazgo'),
         ),
         body: SafeArea(
           child: Form(
@@ -139,26 +138,7 @@ class _ReportFormState extends State<_ReportForm> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      SegmentedButton<ReportType>(
-                        segments: [
-                          for (final t in ReportType.values)
-                            ButtonSegment(
-                              value: t,
-                              icon: Icon(t.icon),
-                              label: Text(t.label),
-                            ),
-                        ],
-                        selected: {vm.type},
-                        onSelectionChanged: (s) => vm.setType(s.first),
-                        style: SegmentedButton.styleFrom(
-                          selectedBackgroundColor: AppStatusColors.of(
-                            context,
-                          ).forType(vm.type).background,
-                          selectedForegroundColor: AppStatusColors.of(
-                            context,
-                          ).forType(vm.type).foreground,
-                        ),
-                      ),
+                      const LocalOnlyNotice(),
                       const SizedBox(height: 20),
                       _PhotoField(
                         path: vm.photoPath,
@@ -174,9 +154,7 @@ class _ReportFormState extends State<_ReportForm> {
                         validator: Validators.title,
                         decoration: InputDecoration(
                           labelText: '¿Qué objeto es?',
-                          hintText: lost
-                              ? 'Ej. Audífonos inalámbricos'
-                              : 'Ej. Credencial IPN',
+                          hintText: 'Ej. Credencial IPN',
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -225,15 +203,31 @@ class _ReportFormState extends State<_ReportForm> {
                         value: vm.place,
                         isExpanded: true,
                         decoration: InputDecoration(
-                          labelText: lost
-                              ? '¿Dónde lo perdiste?'
-                              : '¿Dónde lo encontraste?',
+                          labelText: '¿Dónde lo encontraste?',
                         ),
                         items: [
                           for (final l in Escom.locations)
                             DropdownMenuItem(value: l, child: Text(l)),
                         ],
                         onChanged: (l) => vm.setPlace(l!),
+                      ),
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<ItemCustody>(
+                        value: vm.custody,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: '¿Quién lo resguarda?',
+                        ),
+                        items: [
+                          for (final custody in ItemCustody.values)
+                            DropdownMenuItem(
+                              value: custody,
+                              child: Text(custody.label),
+                            ),
+                        ],
+                        onChanged: (value) {
+                          if (value != null) vm.setCustody(value);
+                        },
                       ),
                       const SizedBox(height: 16),
                       InkWell(
@@ -260,9 +254,7 @@ class _ReportFormState extends State<_ReportForm> {
                         maxLength: 80,
                         decoration: InputDecoration(
                           labelText: 'Contacto (opcional)',
-                          hintText: lost
-                              ? 'Teléfono o correo'
-                              : 'Ej. Lo entregué en Gobierno',
+                          hintText: 'Ej. Dónde puedo entregar el objeto',
                           prefixIcon: const Icon(Icons.contact_phone_outlined),
                         ),
                       ),
@@ -270,7 +262,7 @@ class _ReportFormState extends State<_ReportForm> {
                       LoadingButton(
                         label: vm.isEditing
                             ? 'Guardar cambios'
-                            : 'Publicar reporte',
+                            : 'Guardar hallazgo en este dispositivo',
                         loading: vm.saving,
                         onPressed: _save,
                       ),

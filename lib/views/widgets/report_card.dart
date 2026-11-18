@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_status_colors.dart';
-import '../../core/utils/formatters.dart';
 import '../../data/models/report.dart';
 import 'common.dart';
 
@@ -70,7 +69,15 @@ class ReportCard extends StatelessWidget {
                     LocationTag(location: report.location, dense: true),
                     const SizedBox(height: 4),
                     Text(
-                      Formatters.relative(report.createdAt),
+                      report.category.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(color: muted),
+                    ),
+                    Text(
+                      report.custody == null
+                          ? 'Custodia sin especificar'
+                          : 'Custodia: ${report.custody!.label}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.bodySmall?.copyWith(color: muted),
@@ -109,8 +116,8 @@ class ReportList extends StatelessWidget {
         final columns = (constraints.maxWidth / 380).floor().clamp(1, 3);
         // La altura crece con el tamaño de letra del sistema para evitar
         // textos superpuestos con fuentes grandes (accesibilidad).
-        final textHeight = MediaQuery.textScalerOf(context).scale(112);
-        final extent = 24 + textHeight.clamp(112.0, 320.0);
+        final textHeight = MediaQuery.textScalerOf(context).scale(158);
+        final extent = 24 + textHeight.clamp(158.0, 480.0);
         return CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
