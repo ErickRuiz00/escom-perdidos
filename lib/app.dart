@@ -9,6 +9,7 @@ import 'data/local/app_database.dart';
 import 'data/local/secure_store.dart';
 import 'data/repositories/auth_repository.dart';
 import 'data/repositories/found_items_repository.dart';
+import 'data/repositories/recovery_repository.dart';
 import 'data/repositories/weather_repository.dart';
 import 'data/services/api_client.dart';
 import 'data/services/location_service.dart';
@@ -19,6 +20,7 @@ import 'data/services/auth_link_service.dart';
 import 'viewmodels/auth_viewmodel.dart';
 import 'viewmodels/profile_viewmodel.dart';
 import 'viewmodels/reports_viewmodel.dart';
+import 'viewmodels/recovery_viewmodel.dart';
 import 'viewmodels/weather_viewmodel.dart';
 import 'views/auth/auth_flow.dart';
 
@@ -78,6 +80,13 @@ class EscomPerdidosApp extends StatelessWidget {
           create: (_) => WeatherViewModel(
             WeatherRepository(database: database, api: ApiClient()),
           ),
+        ),
+        ChangeNotifierProxyProvider<AuthViewModel, RecoveryViewModel>(
+          create: (context) => RecoveryViewModel(
+            repository: RecoveryRepository(supabase),
+            onItemChanged: context.read<ReportsViewModel>().load,
+          ),
+          update: (_, auth, recovery) => recovery!..bindUser(auth.user?.id),
         ),
       ],
       child: const _AppView(),

@@ -10,6 +10,8 @@ import 'package:escom_perdidos/data/services/notification_service.dart';
 import 'package:escom_perdidos/viewmodels/auth_viewmodel.dart';
 import 'package:escom_perdidos/viewmodels/profile_viewmodel.dart';
 import 'package:escom_perdidos/viewmodels/reports_viewmodel.dart';
+import 'package:escom_perdidos/viewmodels/recovery_viewmodel.dart';
+import '../recovery_helpers.dart';
 import 'package:escom_perdidos/views/auth/auth_flow.dart';
 import 'package:escom_perdidos/views/auth/welcome_view.dart';
 import 'package:escom_perdidos/views/home/home_shell.dart';
@@ -90,6 +92,7 @@ void main() {
   late ReportsViewModel reports;
   late ProfileViewModel profile;
   late _Reports repository;
+  late RecoveryViewModel recovery;
   final media = MediaService();
   final notifications = NotificationService();
   setUp(() async {
@@ -98,6 +101,9 @@ void main() {
     await auth.restoreSession();
     repository = _Reports();
     reports = ReportsViewModel(repository: repository);
+    recovery = RecoveryViewModel(
+      repository: FakeRecoveryRepository(uid: _user.id),
+    );
     profile = ProfileViewModel(
       repository: authRepository,
       auth: auth,
@@ -117,11 +123,13 @@ void main() {
     double scale = 1,
     bool gate = false,
   }) async {
+    recovery.bindUser(_user.id);
     await tester.pumpWidget(
       MultiProvider(
         providers: [
           ChangeNotifierProvider.value(value: auth),
           ChangeNotifierProvider.value(value: reports),
+          ChangeNotifierProvider(create: (_) => recovery),
           ChangeNotifierProvider.value(value: profile),
           Provider.value(value: media),
           Provider(create: (_) => LocationService()),
@@ -218,7 +226,7 @@ void main() {
         scroll,
       );
       await tab(tester, 'Chats');
-      expect(find.text('Un espacio para reencontrarse'), findsOneWidget);
+      expect(find.text('Sin conversaciones por ahora'), findsOneWidget);
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
       expect(find.text('Hola, Ana'), findsOneWidget);
@@ -325,43 +333,46 @@ void main() {
     },
   );
 
-  testWidgets(
-    'detalle ajeno con custodia Alumno mantiene Creo que es mío deshabilitado',
-    (tester) async {
-      tester.view.physicalSize = const Size(390, 844);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-      final date = DateTime(2026);
-      repository.items.add(
-        Report(
-          id: 'student-item',
-          userId: 'other-student',
-          type: ReportType.found,
-          title: 'Llaves de prueba',
-          description: 'Llaves con llavero de prueba',
-          category: ItemCategory.keys,
-          location: 'Biblioteca',
-          eventDate: date,
-          status: ReportStatus.active,
-          custody: ItemCustody.student,
-          createdAt: date,
-          updatedAt: date,
-        ),
-      );
-      await pump(tester);
-      await tester.ensureVisible(find.byType(ReportCard));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byType(ReportCard));
-      await tester.pumpAndSettle();
-      final claim = find.widgetWithText(FilledButton, 'Creo que es mío');
-      expect(claim, findsOneWidget);
-      expect(tester.widget<FilledButton>(claim).onPressed, isNull);
-      expect(find.text('Editar publicación'), findsNothing);
-      expect(find.text('Retirar publicación'), findsNothing);
-      expect(tester.takeException(), isNull);
-    },
-  );
+  testWidgets('detalle ajeno con custodia Alumno activa la solicitud privada', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final date = DateTime(2026);
+    repository.items.add(
+      Report(
+        id: 'student-item',
+        userId: 'other-student',
+        type: ReportType.found,
+        title: 'Llaves de prueba',
+        description: 'Llaves con llavero de prueba',
+        category: ItemCategory.keys,
+        location: 'Biblioteca',
+        eventDate: date,
+        status: ReportStatus.active,
+        custody: ItemCustody.student,
+        createdAt: date,
+        updatedAt: date,
+      ),
+    );
+    await pump(tester);
+    await tester.ensureVisible(find.byType(ReportCard));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(ReportCard));
+    await tester.pumpAndSettle();
+    final claim = find.widgetWithText(FilledButton, 'Creo que es mío');
+    expect(claim, findsOneWidget);
+    expect(tester.widget<FilledButton>(claim).onPressed, isNotNull);
+    await tester.ensureVisible(claim);
+    await tester.tap(claim);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('recovery-evidence')), findsOneWidget);
+    expect(find.text('Editar publicación'), findsNothing);
+    expect(find.text('Retirar publicación'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets(
     'detalle ajeno en Prefectura declara entrega sin ofrecer edición ni confirmarla',

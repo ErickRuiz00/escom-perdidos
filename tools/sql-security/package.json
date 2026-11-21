@@ -1,6 +1,6 @@
 {
   "private": true,
   "type": "module",
-  "scripts": {"test": "node verify.mjs"},
+  "scripts": {"test": "node verify.mjs && node verify-recovery.mjs", "test:recovery": "node verify-recovery.mjs"},
   "devDependencies": {"@electric-sql/pglite": "0.5.16"}
 }
