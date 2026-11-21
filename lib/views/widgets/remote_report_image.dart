@@ -21,6 +21,8 @@ class _RemoteReportImageState extends State<RemoteReportImage>
   Future<String>? _url;
   Timer? _timer;
   bool _retried = false;
+  int? _session;
+  ImageProvider? _image;
   @override
   void initState() {
     super.initState();
@@ -30,7 +32,13 @@ class _RemoteReportImageState extends State<RemoteReportImage>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _url ??= context.read<ReportsViewModel>().photoUrl(widget.storagePath);
+    final reports = context.watch<ReportsViewModel>();
+    if (_session != reports.sessionRevision) {
+      _session = reports.sessionRevision;
+      _retried = false;
+      _forgetImage();
+      _url = reports.photoUrl(widget.storagePath);
+    }
     _schedule();
   }
 
@@ -39,6 +47,7 @@ class _RemoteReportImageState extends State<RemoteReportImage>
     super.didUpdateWidget(oldWidget);
     if (oldWidget.storagePath != widget.storagePath) {
       _retried = false;
+      _forgetImage();
       _url = context.read<ReportsViewModel>().photoUrl(widget.storagePath);
     }
   }
@@ -52,12 +61,13 @@ class _RemoteReportImageState extends State<RemoteReportImage>
 
   void _refresh() {
     if (!mounted) return;
-    setState(
-      () => _url = context.read<ReportsViewModel>().photoUrl(
+    _forgetImage();
+    setState(() {
+      _url = context.read<ReportsViewModel>().photoUrl(
         widget.storagePath,
         refresh: true,
-      ),
-    );
+      );
+    });
     _schedule();
   }
 
@@ -75,12 +85,22 @@ class _RemoteReportImageState extends State<RemoteReportImage>
   @override
   void dispose() {
     _timer?.cancel();
+    _forgetImage();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
+  void _forgetImage() {
+    final previous = _image;
+    _image = null;
+    if (previous != null) unawaited(previous.evict());
+  }
+
   @override
   Widget build(BuildContext context) => FutureBuilder<String>(
+    // FutureBuilder conserva datos anteriores al cambiar de future. Una clave
+    // nueva evita mostrar otra fotografía mientras se autoriza la siguiente.
+    key: ObjectKey(_url),
     future: _url,
     builder: (context, snapshot) {
       Widget fallback() => Stack(
@@ -99,14 +119,21 @@ class _RemoteReportImageState extends State<RemoteReportImage>
       );
       if (snapshot.hasError) return fallback();
       if (!snapshot.hasData) return widget.placeholder;
-      return Image.network(
-        snapshot.data!,
+      _image ??= ResizeImage.resizeIfNeeded(
+        800,
+        null,
+        NetworkImage(snapshot.data!),
+      );
+      return Image(
+        image: _image!,
         fit: BoxFit.cover,
-        cacheWidth: 800,
         errorBuilder: (_, _, _) {
           if (!_retried) {
             _retried = true;
-            WidgetsBinding.instance.addPostFrameCallback((_) => _refresh());
+            final failedUrl = _url;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted && identical(_url, failedUrl)) _refresh();
+            });
           }
           return fallback();
         },

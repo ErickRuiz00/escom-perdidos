@@ -54,14 +54,21 @@ class FoundItemsRepository {
   });
 
   Future<Report?> findById(String id) => _guard(() async {
-    _userId;
+    final uid = _userId;
     final row = await _client
         .from('found_items')
         .select(columns)
         .eq('id', id)
         .maybeSingle();
+    _assertSessionUser(uid);
     return row == null ? null : Report.fromRemote(row);
   });
+
+  void _assertSessionUser(String uid) {
+    if (_userId != uid) {
+      throw const AuthException('La sesión cambió. Abre de nuevo la pantalla.');
+    }
+  }
 
   static void validate(Report report) {
     final error =
@@ -108,6 +115,7 @@ class FoundItemsRepository {
   }
 
   Future<String?> _upload(Report report, PublicationPhoto? photo) async {
+    _assertOwner(report);
     if (photo == null) return report.photoObjectPath;
     final path = photo.objectPath(report.userId, report.id);
     try {
@@ -130,7 +138,8 @@ class FoundItemsRepository {
   }
 
   Future<void> _cleanup(String? path) async {
-    if (path == null) return;
+    final uid = _client.auth.currentUser?.id;
+    if (path == null || uid == null || !path.startsWith('$uid/')) return;
     try {
       await _client.storage.from(bucket).remove([path]);
     } catch (_) {
@@ -170,6 +179,7 @@ class FoundItemsRepository {
           .insert(payload)
           .select(columns)
           .single();
+      _assertSessionUser(report.userId);
       return Report.fromRemote(row);
     } catch (_) {
       // La respuesta puede perderse después de confirmar el INSERT. Se verifica
@@ -222,6 +232,7 @@ class FoundItemsRepository {
         await _upload(report, photo);
         Report? confirmed;
         try {
+          _assertOwner(report);
           final row = await _client
               .from('found_items')
               .update(payload)
@@ -236,13 +247,18 @@ class FoundItemsRepository {
               'La publicación cambió. Vuelve a abrir su detalle.',
             );
           }
+          _assertSessionUser(report.userId);
           confirmed = Report.fromRemote(row);
         } catch (_) {
           var checked = false;
           try {
             final row = await findById(report.id);
+            _assertSessionUser(report.userId);
             checked = true;
-            if (row != null && row.isActive && _matches(row, payload)) {
+            if (row != null &&
+                row.userId == report.userId &&
+                row.isActive &&
+                _matches(row, payload)) {
               confirmed = row;
             }
           } catch (_) {}
@@ -261,26 +277,43 @@ class FoundItemsRepository {
 
   Future<Report> withdraw(Report report) => _guard(() async {
     _assertOwner(report);
-    final row = await _client
-        .from('found_items')
-        .update({'status': 'withdrawn'})
-        .eq('id', report.id)
-        .eq('finder_id', report.userId)
-        .eq('status', 'active')
-        .eq('updated_at', report.updatedAt.toUtc().toIso8601String())
-        .select(columns)
-        .maybeSingle();
-    if (row == null) {
-      throw const AppException(
-        'La publicación cambió. Actualiza el detalle antes de retirarla.',
-      );
+    try {
+      final row = await _client
+          .from('found_items')
+          .update({'status': 'withdrawn'})
+          .eq('id', report.id)
+          .eq('finder_id', report.userId)
+          .eq('status', 'active')
+          .eq('updated_at', report.updatedAt.toUtc().toIso8601String())
+          .select(columns)
+          .maybeSingle();
+      _assertSessionUser(report.userId);
+      if (row == null) {
+        throw const AppException(
+          'La publicación cambió. Actualiza el detalle antes de retirarla.',
+        );
+      }
+      return Report.fromRemote(row);
+    } catch (_) {
+      // Un retiro confirmado también es seguro de reintentar si se perdió su
+      // respuesta. Nunca se intenta reactivar ni sobrescribir una versión nueva.
+      try {
+        final confirmed = await findById(report.id);
+        _assertSessionUser(report.userId);
+        if (confirmed?.userId == report.userId &&
+            confirmed?.status == ReportStatus.withdrawn) {
+          return confirmed!;
+        }
+      } catch (_) {}
+      rethrow;
     }
-    return Report.fromRemote(row);
   });
 
   Future<String> signedPhotoUrl(String path) => _guard(() async {
-    _userId;
-    return _client.storage.from(bucket).createSignedUrl(path, 120);
+    final uid = _userId;
+    final url = await _client.storage.from(bucket).createSignedUrl(path, 120);
+    _assertSessionUser(uid);
+    return url;
   });
 
   Future<T> _guard<T>(Future<T> Function() action) async {

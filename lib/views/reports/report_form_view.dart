@@ -176,7 +176,7 @@ class _ReportFormState extends State<_ReportForm> {
                                           const SizedBox(height: 8),
                                           const Text('Agregar foto opcional'),
                                           const Text(
-                                            'JPEG, PNG o WebP · hasta 3 MB',
+                                            'JPEG, PNG o WebP · hasta 3 MiB',
                                           ),
                                         ],
                                       ),

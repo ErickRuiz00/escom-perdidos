@@ -22,6 +22,7 @@ class ReportsViewModel extends ChangeNotifier {
   bool _loading = false;
   String? _error;
   bool get loading => _loading;
+  int get sessionRevision => _session;
   String? get error => _error;
   List<Report> get communityFound => List.unmodifiable(_community);
   List<Report> mine(String uid) =>

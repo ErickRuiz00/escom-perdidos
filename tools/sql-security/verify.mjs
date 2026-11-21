@@ -55,12 +55,24 @@ try {
   async function rows(sql,count) { assert.equal((await db.query(sql)).rows.length,count); }
   const insertion = `insert into public.found_items(title,category,description,found_on,zone,custody)
     values ('Nuevo termo','bottles','Termo nuevo de prueba',current_date-1,'Biblioteca','student') returning finder_id`;
+  const bucket = (await db.query(`select * from storage.buckets where id='found-item-photos'`)).rows[0];
+  assert.equal(bucket.public,false);
+  assert.equal(Number(bucket.file_size_limit),3145728);
+  assert.deepEqual(bucket.allowed_mime_types,['image/jpeg','image/png','image/webp']);
+  passed++;
+  console.log('PASS bucket privado con límite de 3 MiB y MIME JPEG/PNG/WebP');
   await test('A ve catálogo y sus estados privados',A,() => rows('select * from public.found_items',4));
   await test('B no ve retiradas ni devueltas de A',B,() => rows('select * from public.found_items',2));
   await test('autor lo fija auth.uid',A,async () => assert.equal((await db.query(insertion)).rows[0].finder_id,A));
   await test('sin SELECT para anon','',() => denied('select * from public.found_items'),'anon');
   await test('sin INSERT para anon','',() => denied(insertion),'anon');
   await test('B no edita publicación de A',B,() => rows(`update public.found_items set title='Título ajeno' where id='${ITEM}' returning id`,0));
+  await test('B no retira publicación de A',B,() => rows(`update public.found_items set status='withdrawn' where id='${ITEM}' returning id`,0));
+  await test('Mis hallazgos de B incluye solo sus publicaciones',B,async () => {
+    const mine = (await db.query(`select * from public.found_items where finder_id=auth.uid()`)).rows;
+    assert.equal(mine.length,1);
+    assert.ok(mine.every(item => item.finder_id === B));
+  });
   await test('no puede asignar autor al crear',A,() => denied(`insert into public.found_items(finder_id,title,category,description,found_on,zone,custody) values ('${B}','Otro termo','bottles','Descripción de prueba',current_date-1,'Biblioteca','student')`));
   await test('no puede alterar propiedad',A,() => denied(`update public.found_items set finder_id='${B}' where id='${ITEM}'`));
   await test('no puede alterar fechas de auditoría',A,() => denied(`update public.found_items set created_at=now()-interval '2 days' where id='${ITEM}'`));
@@ -81,6 +93,24 @@ try {
   await test('B puede leer la foto vinculada visible',B,() => rows('select * from storage.objects',1));
   await test('anon no lee fotos privadas','',() => rows('select * from storage.objects',0),'anon');
   await test('B no sube a carpeta ajena',B,() => denied(`insert into storage.objects(bucket_id,name) values ('found-item-photos','${A}/${OTHER}/66666666-6666-4666-8666-666666666666.jpg')`));
+  await test('A sube y consulta una foto provisional propia',A,async () => {
+    const path = `${A}/${ITEM}/66666666-6666-4666-8666-666666666666.webp`;
+    await rows(`insert into storage.objects(bucket_id,name) values ('found-item-photos','${path}') returning id`,1);
+    await rows(`select * from storage.objects where name='${path}'`,1);
+  });
+  await test('A no sube extensiones fuera del modelo',A,() => denied(`insert into storage.objects(bucket_id,name) values ('found-item-photos','${A}/${ITEM}/66666666-6666-4666-8666-666666666666.svg')`));
+  await test('B no sobrescribe una foto de A',B,() => rows(`update storage.objects set name=name where name='${PHOTO}' returning id`,0));
+  await test('B no elimina una foto de A aunque esté desvinculada',A,async () => {
+    await db.exec(`update public.found_items set photo_path=null where id='${ITEM}'; select set_config('request.jwt.claim.sub','${B}',true)`);
+    await rows(`delete from storage.objects where name='${PHOTO}' returning id`,0);
+  });
+  await test('restricciones no bloquean otros buckets',B,async () => {
+    // La política heredada de la preparación permite este bucket independiente.
+    // La restricción de Fase 3 debe limitarse a found-item-photos.
+    await db.exec('reset role');
+    await db.exec(`insert into storage.buckets(id,name,public) values ('unrelated','unrelated',false); set local role authenticated`);
+    await rows(`insert into storage.objects(bucket_id,name) values ('unrelated','legacy.png') returning id`,1);
+  });
   await test('ningún cliente sobrescribe fotos',A,() => rows(`update storage.objects set name=name where name='${PHOTO}' returning id`,0));
   await test('no elimina foto vinculada',A,() => rows(`delete from storage.objects where name='${PHOTO}' returning id`,0));
   await test('elimina foto propia después de desvincular',A,async () => {

@@ -1,9 +1,90 @@
 # Fase 3: publicaciones de hallazgos con Supabase
 
-El código utiliza Supabase como fuente compartida. **La activación remota y la
-prueba entre dos dispositivos requieren revisar y aplicar manualmente los SQL de
-esta fase.** No se ejecutaron migraciones, cambios de Storage ni SQL de prueba en
-el proyecto remoto desde este trabajo. No se cambió Supabase Auth.
+El código utiliza Supabase como fuente compartida. **El cierre sigue pendiente
+de verificar el proyecto remoto con dos cuentas y Storage HTTP.** Las migraciones
+se aplican manualmente tras revisar el esquema; no se ejecutaron ni se volvieron
+a aplicar desde esta revisión. No se cambió Supabase Auth.
+
+## Revisión de cierre del 21 de noviembre de 2026
+
+Estado inicial: árbol limpio en `feature/found-items-supabase`, commit `e49de5a`,
+sin cambios pendientes que conservar aparte. Se ejecutó `git fetch origin`;
+`origin/main` seguía en `f5d0e42`, ancestro de la rama de Fase 3.
+
+Correcciones de esta revisión:
+
+- El repositorio comprueba la identidad después de consultar detalles, generar
+  URLs firmadas y confirmar escrituras. Una edición vuelve a comprobar autoría
+  después de subir la imagen. La limpieza de provisionales solo se intenta
+  dentro de la carpeta de la cuenta actual.
+- El retiro verifica el estado remoto si pierde la respuesta y reconoce un
+  retiro ya confirmado al reintentar, sin reactivar ni duplicar filas.
+- Las imágenes se descartan al cambiar cuenta, ruta o autorización. Se elimina
+  su entrada de la caché de Flutter al reemplazarlas o desmontarlas, y un
+  `FutureBuilder` nuevo evita conservar visualmente la foto anterior durante
+  la siguiente autorización. Los reintentos pendientes no reemplazan una
+  solicitud de imagen más reciente.
+- Se corrigió la renovación automática/manual de fotos: el callback de
+  `setState` era una asignación que devolvía un `Future` y provocaba una
+  aserción en debug. Ahora actualiza el estado de forma síncrona.
+- El formulario y la validación indican **3 MiB**, correspondientes al límite
+  existente de 3145728 bytes. No cambió el límite ni el diseño.
+
+Las migraciones de Fase 3 se revisaron sin modificarlas. La suite PostgreSQL
+ejecuta ambas en PGlite y prueba RLS con dos identidades, incluyendo una política
+permisiva heredada de Storage: edición/retiro ajenos, estados terminales,
+custodia, fotos provisionales, acceso compartido autorizado, restricciones de
+subida/borrado/sobrescritura y aislamiento respecto de otros buckets. También
+comprueba que el bucket es privado y configura JPEG/PNG/WebP con máximo de 3 MiB.
+Estas comprobaciones de metadatos no prueban la validación HTTP real de Storage.
+
+Se consultó el endpoint remoto `found_items?select=id&limit=0`, usando solo la
+clave pública local, sin sesión y sin recuperar publicaciones. Respondió HTTP
+401 / PostgreSQL `42501`, `permission denied for table found_items`: confirma
+la existencia de la tabla y la denegación de SELECT a `anon`. **No confirma
+las políticas del rol `authenticated`, sus columnas, triggers ni el bucket
+remoto.** No debe seguirse la sugerencia automática del error de conceder
+SELECT a `anon`: el catálogo requiere autenticación.
+
+La configuración local usa una clave `sb_publishable_` y está ignorada por Git.
+La inspección de archivos versionados no detectó claves secretas de Supabase,
+JWT privilegiados, claves privadas ni cadenas de conexión con contraseña. Las
+URLs firmadas duran 120 segundos y solo viven en memoria; no se almacenan en
+SQLite. Un enlace ya emitido puede seguir funcionando hasta caducar, incluso
+después de cerrar la sesión, conforme al modelo de
+[URLs firmadas de Supabase](https://supabase.com/docs/guides/storage/serving/downloads).
+La app descarta sus referencias al cambiar de cuenta.
+
+Las pruebas Flutter usan el SDK con HTTP controlado y pruebas de widgets; el
+proyecto no contiene una suite `integration_test` contra el backend desplegado.
+Las pruebas reales A/B y el SQL remoto de verificación requieren cuentas de
+prueba y acceso al proyecto que no están disponibles en esta sesión. No se
+crearon usuarios ni se publicaron objetos remotos para suplir ese acceso.
+
+Resultados ejecutados con Flutter 3.32.8 / Dart 3.8.1:
+
+| Comprobación | Resultado final |
+| --- | --- |
+| `flutter pub get` | Correcto; sin cambios en dependencias versionadas. |
+| `flutter analyze --no-pub` | Sin incidencias. |
+| `flutter test --no-pub --concurrency=1` | **109 pruebas aprobadas**. |
+| `npm test` en `tools/sql-security` | **36 comprobaciones PostgreSQL aprobadas**. |
+| `git diff --check` | Correcto. |
+| A/B remoto, SQL remoto y Storage HTTP | **Pendientes; no ejecutados**. |
+
+Se añadieron regresiones para paginación con más de 200 filas y duplicados entre
+páginas, cambio de identidad durante subidas/confirmaciones, URLs tardías, retiro
+con respuesta perdida, límite exacto de tamaño, firmas de los tres formatos,
+raster corrupto, descarte de caché de imágenes y renovación tras fallo HTTP.
+Las pruebas iniciales detectaron el fallo de `setState`; se corrigió y se repitió
+la suite completa hasta el resultado anterior.
+
+**Decisión de integración:** conservar los cambios en la rama de Fase 3 y
+publicarla; no fusionar ni publicar `main` hasta ejecutar y registrar la prueba
+remota A/B descrita abajo y verificar las políticas y límites desplegados.
+No se considera un cierre oficial aprobado. «Creo que es mío» sigue
+deshabilitado y tiene una prueba de widget explícita; solicitudes, coincidencias,
+verificación de propiedad y chat siguen fuera del alcance.
 
 ## Git
 

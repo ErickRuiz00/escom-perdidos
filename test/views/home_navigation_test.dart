@@ -326,6 +326,44 @@ void main() {
   );
 
   testWidgets(
+    'detalle ajeno con custodia Alumno mantiene Creo que es mío deshabilitado',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final date = DateTime(2026);
+      repository.items.add(
+        Report(
+          id: 'student-item',
+          userId: 'other-student',
+          type: ReportType.found,
+          title: 'Llaves de prueba',
+          description: 'Llaves con llavero de prueba',
+          category: ItemCategory.keys,
+          location: 'Biblioteca',
+          eventDate: date,
+          status: ReportStatus.active,
+          custody: ItemCustody.student,
+          createdAt: date,
+          updatedAt: date,
+        ),
+      );
+      await pump(tester);
+      await tester.ensureVisible(find.byType(ReportCard));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(ReportCard));
+      await tester.pumpAndSettle();
+      final claim = find.widgetWithText(FilledButton, 'Creo que es mío');
+      expect(claim, findsOneWidget);
+      expect(tester.widget<FilledButton>(claim).onPressed, isNull);
+      expect(find.text('Editar publicación'), findsNothing);
+      expect(find.text('Retirar publicación'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
     'detalle ajeno en Prefectura declara entrega sin ofrecer edición ni confirmarla',
     (tester) async {
       tester.view.physicalSize = const Size(390, 844);

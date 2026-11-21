@@ -22,7 +22,7 @@ class PublicationPhoto {
 
   static PublicationPhoto inspect(Uint8List bytes) {
     if (bytes.isEmpty || bytes.length > maxBytes) {
-      throw const AppException('La foto debe pesar como máximo 3 MB.');
+      throw const AppException('La foto debe pesar como máximo 3 MiB.');
     }
     final type = switch (bytes) {
       [0xff, 0xd8, 0xff, ...] => ('jpg', 'image/jpeg'),
@@ -41,7 +41,7 @@ class PublicationPhoto {
   static Future<PublicationPhoto> read(String path) async {
     final file = File(path);
     if (await file.length() > maxBytes) {
-      throw const AppException('La foto debe pesar como máximo 3 MB.');
+      throw const AppException('La foto debe pesar como máximo 3 MiB.');
     }
     final photo = inspect(await file.readAsBytes());
     final buffer = await ui.ImmutableBuffer.fromUint8List(photo.bytes);

@@ -45,10 +45,15 @@ class Backend {
   final requests = <http.Request>[];
   bool failWrite = false;
   bool loseInsertReply = false;
+  bool loseUpdateReply = false;
   bool failUpload = false;
+  bool overlapPages = false;
   int inserts = 0;
   String sessionOwner = uid;
   Future<void> Function()? onNextRead;
+  Future<void> Function()? onNextUpload;
+  Future<void> Function()? onNextSign;
+  Future<void> Function()? onNextUpdate;
   late final sb.SupabaseClient client = sb.SupabaseClient(
     'https://test.supabase.co',
     'sb_publishable_test',
@@ -106,6 +111,9 @@ class Backend {
       });
     }
     if (path.startsWith('/storage/v1/object/sign/')) {
+      final action = onNextSign;
+      onNextSign = null;
+      await action?.call();
       return json({
         'signedURL': '/object/sign/found-item-photos/test.png?token=test',
       });
@@ -121,6 +129,9 @@ class Backend {
       photos.add(
         path.substring('/storage/v1/object/found-item-photos/'.length),
       );
+      final action = onNextUpload;
+      onNextUpload = null;
+      await action?.call();
       return json({'Key': path.substring('/storage/v1/object/'.length)});
     }
     if (path == '/storage/v1/object/found-item-photos' &&
@@ -143,7 +154,7 @@ class Backend {
         final data = jsonDecode(request.body) as Map<String, dynamic>;
         final row = {
           ...data,
-          'finder_id': uid,
+          'finder_id': sessionOwner,
           'status': 'active',
           'created_at': '2026-01-01T00:00:00Z',
           'updated_at': '2026-01-01T00:00:00Z',
@@ -155,7 +166,9 @@ class Backend {
         return json(row, 201);
       }
       var found = rows.values
-          .where((r) => r['status'] == 'active' || r['finder_id'] == uid)
+          .where(
+            (r) => r['status'] == 'active' || r['finder_id'] == sessionOwner,
+          )
           .toList();
       for (final key in ['id', 'finder_id', 'status', 'updated_at']) {
         final filter = query[key];
@@ -175,11 +188,19 @@ class Backend {
         if (failWrite) return json({'code': '42501', 'message': 'denied'}, 403);
         final data = jsonDecode(request.body) as Map<String, dynamic>;
         found = found
-            .where((r) => r['finder_id'] == uid && r['status'] == 'active')
+            .where(
+              (r) => r['finder_id'] == sessionOwner && r['status'] == 'active',
+            )
             .toList();
         for (final row in found) {
           row.addAll(data);
           row['updated_at'] = '2026-01-02T00:00:00Z';
+        }
+        final action = onNextUpdate;
+        onNextUpdate = null;
+        await action?.call();
+        if (loseUpdateReply) {
+          throw const SocketException('Controlled response loss');
         }
       }
       if (request.headers['accept']?.contains('vnd.pgrst.object') ?? false) {
@@ -187,7 +208,10 @@ class Backend {
             ? json({'code': 'PGRST116', 'message': 'none'}, 406)
             : json(found.single);
       }
-      return json(found);
+      final offset = int.tryParse(query['offset'] ?? '') ?? 0;
+      final limit = int.tryParse(query['limit'] ?? '') ?? found.length;
+      final start = overlapPages && offset > 0 ? offset - 1 : offset;
+      return json(found.skip(start).take(limit).toList());
     }
     throw StateError('Unexpected request ${request.method} $path');
   }
@@ -206,6 +230,29 @@ void main() {
     repository = FoundItemsRepository(SupabaseService(client: backend.client));
   });
   tearDown(() => backend.client.dispose());
+
+  Future<void> switchAccount() async {
+    backend.sessionOwner = other;
+    await backend.client.auth.signInWithPassword(
+      email: 'other@example.org',
+      password: 'test-password',
+    );
+  }
+
+  Future<String> photoFile() async {
+    final recorder = ui.PictureRecorder();
+    ui.Canvas(recorder).drawColor(const ui.Color(0xff0055a5), ui.BlendMode.src);
+    final picture = recorder.endRecording();
+    final image = await picture.toImage(2, 2);
+    final data = await image.toByteData(format: ui.ImageByteFormat.png);
+    image.dispose();
+    picture.dispose();
+    final dir = await Directory.systemTemp.createTemp('found-photo-');
+    addTearDown(() => dir.delete(recursive: true));
+    final path = '${dir.path}/safe.png';
+    await File(path).writeAsBytes(data!.buffer.asUint8List());
+    return path;
+  }
 
   test(
     'catálogo consulta active, Mis hallazgos filtra autor y no pide perfiles privados',
@@ -291,9 +338,123 @@ void main() {
       };
       await expectLater(
         repository.create(fixture()),
-        throwsA(isA<PermissionException>()),
+        throwsA(isA<AuthException>()),
       );
       expect(backend.inserts, 0);
+    },
+  );
+
+  test(
+    'paginación recorre más de 200 filas y deduplica páginas solapadas',
+    () async {
+      for (var index = 0; index < 201; index++) {
+        final identifier =
+            '11111111-1111-4111-8111-${index.toString().padLeft(12, '0')}';
+        backend.rows[identifier] = backend.remote(
+          fixture(identifier: identifier),
+        );
+      }
+      backend.overlapPages = true;
+      final found = await repository.fetchAll();
+      expect(found, hasLength(201));
+      expect(found.map((r) => r.id).toSet(), hasLength(201));
+      final reads = backend.requests.where(
+        (r) => r.url.path == '/rest/v1/found_items',
+      );
+      expect(reads.map((r) => r.url.queryParameters['offset']), ['0', '200']);
+      expect(
+        reads.every((r) => r.url.queryParameters['limit'] == '200'),
+        isTrue,
+      );
+    },
+  );
+
+  test(
+    'detalle y URL firmada rechazan respuestas de la cuenta anterior',
+    () async {
+      backend.rows[id] = backend.remote(fixture());
+      backend.onNextRead = switchAccount;
+      await expectLater(repository.findById(id), throwsA(isA<AuthException>()));
+      backend.sessionOwner = uid;
+      await backend.client.auth.signInWithPassword(
+        email: 'test@example.org',
+        password: 'test-password',
+      );
+      backend.onNextSign = switchAccount;
+      await expectLater(
+        repository.signedPhotoUrl('$uid/$id/photo.png'),
+        throwsA(isA<AuthException>()),
+      );
+    },
+  );
+
+  test(
+    'cambio de cuenta durante upload impide crear o editar después',
+    () async {
+      final path = await photoFile();
+      backend.onNextUpload = switchAccount;
+      await expectLater(
+        repository.create(fixture().copyWith(photoPath: path)),
+        throwsA(isA<AppException>()),
+      );
+      expect(backend.inserts, 0);
+      backend.sessionOwner = uid;
+      await backend.client.auth.signInWithPassword(
+        email: 'test@example.org',
+        password: 'test-password',
+      );
+      backend.rows[id] = backend.remote(fixture());
+      backend.onNextUpload = switchAccount;
+      await expectLater(
+        repository.update(
+          fixture().copyWith(photoPath: path),
+          expectedUpdatedAt: fixture().updatedAt,
+        ),
+        throwsA(isA<AppException>()),
+      );
+      expect(backend.requests.where((r) => r.method == 'PATCH'), isEmpty);
+      expect(backend.requests.where((r) => r.method == 'DELETE'), isEmpty);
+    },
+  );
+
+  test(
+    'retiro con respuesta perdida se confirma y permite reintento',
+    () async {
+      backend.rows[id] = backend.remote(fixture());
+      backend.loseUpdateReply = true;
+      expect(
+        (await repository.withdraw(fixture())).status,
+        ReportStatus.withdrawn,
+      );
+      backend.loseUpdateReply = false;
+      expect(
+        (await repository.withdraw(fixture())).status,
+        ReportStatus.withdrawn,
+      );
+      expect(backend.rows, hasLength(1));
+      expect(await repository.fetchAll(), isEmpty);
+      expect(await repository.fetchMine(), hasLength(1));
+    },
+  );
+
+  test(
+    'respuesta de edición confirmada con cambio de cuenta no se entrega a B',
+    () async {
+      backend.rows[id] = backend.remote(fixture());
+      backend.onNextUpdate = switchAccount;
+      await expectLater(
+        repository.update(
+          fixture().copyWith(title: 'Termo editado'),
+          expectedUpdatedAt: fixture().updatedAt,
+        ),
+        throwsA(isA<AuthException>()),
+      );
+      expect(
+        backend.rows[id]!['title'],
+        'Termo editado',
+        reason:
+            'El servidor puede confirmar antes del cambio; la sesión B no recibe esa confirmación',
+      );
     },
   );
 
@@ -459,6 +620,28 @@ void main() {
       );
     }
   });
+  test('firmas JPEG, PNG y WebP y límite exacto de 3 MiB', () {
+    final samples = <List<int>, String>{
+      [0xff, 0xd8, 0xff]: 'image/jpeg',
+      [137, 80, 78, 71, 13, 10, 26, 10]: 'image/png',
+      [82, 73, 70, 70, 0, 0, 0, 0, 87, 69, 66, 80]: 'image/webp',
+    };
+    for (final entry in samples.entries) {
+      final bytes = Uint8List(PublicationPhoto.maxBytes)..setAll(0, entry.key);
+      expect(PublicationPhoto.inspect(bytes).mimeType, entry.value);
+    }
+  });
+
+  test('una firma PNG con contenido corrupto no se acepta como foto', () async {
+    final dir = await Directory.systemTemp.createTemp('invalid-found-photo-');
+    addTearDown(() => dir.delete(recursive: true));
+    final file = File('${dir.path}/corrupt.png');
+    await file.writeAsBytes([137, 80, 78, 71, 13, 10, 26, 10, 0]);
+    await expectLater(
+      PublicationPhoto.read(file.path),
+      throwsA(isA<AppException>()),
+    );
+  });
   test('filtro de fechas incluye ambos extremos y limpiar los elimina', () {
     final r = fixture();
     final filter = ReportFilter(
@@ -530,11 +713,41 @@ void main() {
       expect(vm.communityFound.single.id, source.sent!.id);
     },
   );
+
+  test('URL tardía de A no se entrega ni se almacena en la sesión B', () async {
+    final source = SlowRepository();
+    source.pendingLoad.complete([]);
+    final vm = ReportsViewModel(repository: source);
+    addTearDown(vm.dispose);
+    vm.bindUser(uid);
+    await Future<void>.delayed(Duration.zero);
+    final pending = vm.photoUrl('private-photo');
+    final rejected = expectLater(pending, throwsA(isA<AuthException>()));
+    vm.bindUser(other);
+    await Future<void>.delayed(Duration.zero);
+    source.pendingPhoto.complete('https://test.invalid/account-a');
+    await rejected;
+    expect(
+      await vm.photoUrl('private-photo'),
+      'https://test.invalid/account-b',
+    );
+    expect(source.photoReads, 2);
+    expect(
+      await vm.photoUrl('private-photo'),
+      'https://test.invalid/account-b',
+    );
+    expect(source.photoReads, 2);
+    vm.bindUser(null);
+    expect(vm.byId(id), isNull);
+    expect(vm.mine(uid), isEmpty);
+  });
 }
 
 class SlowRepository implements FoundItemsRepository {
   final pendingLoad = Completer<List<Report>>();
   final pendingSave = Completer<Report>();
+  final pendingPhoto = Completer<String>();
+  int photoReads = 0;
   int reads = 0;
   int creates = 0;
   Report? sent;
@@ -543,6 +756,10 @@ class SlowRepository implements FoundItemsRepository {
       reads++ == 0 ? pendingLoad.future : Future.value([]);
   @override
   Future<List<Report>> fetchMine() async => [];
+  @override
+  Future<String> signedPhotoUrl(String path) => photoReads++ == 0
+      ? pendingPhoto.future
+      : Future.value('https://test.invalid/account-b');
   @override
   Future<Report> create(Report report) {
     creates++;
