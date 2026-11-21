@@ -8,6 +8,7 @@ import '../../viewmodels/auth_viewmodel.dart';
 import '../../viewmodels/reports_viewmodel.dart';
 import '../widgets/common.dart';
 import 'report_form_view.dart';
+import '../recovery/recovery_request_form.dart';
 
 class ReportDetailView extends StatefulWidget {
   const ReportDetailView({super.key, required this.reportId});
@@ -194,13 +195,26 @@ class _ReportDetailViewState extends State<ReportDetailView> {
                               if (!owner &&
                                   report.isActive &&
                                   report.custody == ItemCustody.student) ...[
-                                const FilledButton(
-                                  onPressed: null,
-                                  child: Text('Creo que es mío'),
+                                FilledButton(
+                                  onPressed:
+                                      _loading || _withdrawing || _error != null
+                                      ? null
+                                      : () async {
+                                          await Navigator.of(context).push(
+                                            MaterialPageRoute<void>(
+                                              builder: (_) =>
+                                                  RecoveryRequestForm(
+                                                    report: report,
+                                                  ),
+                                            ),
+                                          );
+                                          if (mounted) _reload();
+                                        },
+                                  child: const Text('Creo que es mío'),
                                 ),
                                 const SizedBox(height: 8),
                                 const Text(
-                                  'Las solicitudes al alumno que lo resguarda estarán disponibles más adelante.',
+                                  'Envía características privadas al estudiante que lo resguarda para que pueda revisarlas.',
                                   textAlign: TextAlign.center,
                                 ),
                               ],

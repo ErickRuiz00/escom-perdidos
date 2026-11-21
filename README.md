@@ -11,6 +11,9 @@ La pantalla principal, navegación y límites de la fase 2 están en
 La fase 3, sus migraciones manuales, permisos de Storage y pruebas con dos cuentas
 están en [publicaciones con Supabase](docs/found_items_supabase.md).
 
+La Fase 4, recuperación privada, chat, migración y pruebas A/B/C están en
+[recuperación de objetos](docs/recovery_requests_chat.md).
+
 ## Getting Started
 
 This project is a starting point for a Flutter application.

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../features/splash/presentation/animated_circuit_logo.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 import '../../viewmodels/reports_viewmodel.dart';
+import '../../viewmodels/recovery_viewmodel.dart';
 import '../widgets/common.dart';
 import 'community_views.dart';
 
@@ -78,7 +79,14 @@ class _FeedViewState extends State<FeedView> {
                 builder: (_) => const NotificationsView(),
               ),
             ),
-            icon: const Icon(Icons.notifications_none_rounded),
+            icon: Badge(
+              isLabelVisible:
+                  context.watch<RecoveryViewModel>().incomingPending > 0,
+              label: Text(
+                '${context.watch<RecoveryViewModel>().incomingPending}',
+              ),
+              child: const Icon(Icons.notifications_none_rounded),
+            ),
           ),
           const SizedBox(width: 16),
         ],

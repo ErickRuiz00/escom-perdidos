@@ -8,6 +8,7 @@ import '../reports/report_detail_view.dart';
 import '../widgets/common.dart';
 import '../widgets/publication_notice.dart';
 import '../widgets/report_card.dart';
+import '../recovery/recovery_hub_view.dart';
 
 /// Solo recibe publicaciones públicas; nunca consulta el almacenamiento local.
 class CommunityResults extends StatefulWidget {
@@ -198,48 +199,14 @@ class PublishView extends StatelessWidget {
 class ChatsView extends StatelessWidget {
   const ChatsView({super.key});
   @override
-  Widget build(BuildContext context) => DefaultTabController(
-    length: 2,
-    child: Scaffold(
-      appBar: AppBar(
-        title: const Text('Chats'),
-        bottom: const TabBar(
-          tabs: [
-            Tab(text: 'Solicitudes'),
-            Tab(text: 'Conversaciones'),
-          ],
-        ),
-      ),
-      body: const TabBarView(
-        children: [
-          _ScrollableEmpty(
-            icon: Icons.mark_chat_unread_outlined,
-            title: 'Tus solicitudes, en un solo lugar',
-            message:
-                'Aquí podrás revisar solicitudes sobre objetos encontrados. Esta función estará disponible más adelante.',
-          ),
-          _ScrollableEmpty(
-            icon: Icons.forum_outlined,
-            title: 'Un espacio para reencontrarse',
-            message:
-                'Aquí aparecerán tus conversaciones cuando se habilite el chat. Por ahora no puedes enviar ni recibir mensajes.',
-          ),
-        ],
-      ),
-    ),
-  );
+  Widget build(BuildContext context) => const RecoveryHubView();
 }
 
 class NotificationsView extends StatelessWidget {
   const NotificationsView({super.key});
   @override
-  Widget build(BuildContext context) => const PendingActivityView(
-    title: 'Notificaciones',
-    icon: Icons.notifications_none_rounded,
-    heading: 'Tu centro de notificaciones',
-    message:
-        'Los avisos de tu actividad aparecerán aquí cuando esta función esté disponible. Por ahora no hay notificaciones para mostrar.',
-  );
+  Widget build(BuildContext context) =>
+      const RecoveryHubView(notifications: true);
 }
 
 class PendingActivityView extends StatelessWidget {
