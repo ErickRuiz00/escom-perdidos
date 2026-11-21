@@ -3,7 +3,7 @@ import 'package:escom_perdidos/core/theme/app_theme.dart';
 import 'package:escom_perdidos/data/models/report.dart';
 import 'package:escom_perdidos/data/models/user.dart';
 import 'package:escom_perdidos/data/repositories/auth_repository.dart';
-import 'package:escom_perdidos/data/repositories/report_repository.dart';
+import 'package:escom_perdidos/data/repositories/found_items_repository.dart';
 import 'package:escom_perdidos/data/services/location_service.dart';
 import 'package:escom_perdidos/data/services/media_service.dart';
 import 'package:escom_perdidos/data/services/notification_service.dart';
@@ -16,6 +16,7 @@ import 'package:escom_perdidos/views/home/home_shell.dart';
 import 'package:escom_perdidos/views/home/explore_view.dart';
 import 'package:escom_perdidos/views/reports/report_form_view.dart';
 import 'package:escom_perdidos/views/widgets/report_card.dart';
+import 'package:escom_perdidos/views/widgets/common.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -48,27 +49,35 @@ class _Auth implements AuthRepository {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
-class _Reports implements ReportRepository {
-  final items = <Report>[
-    Report(
-      id: 'legacy',
-      userId: 'sample-author',
-      type: ReportType.found,
-      title: 'Muestra que nunca debe ser pública',
-      description: 'Muestra antigua',
-      category: ItemCategory.electronics,
-      location: 'Biblioteca',
-      eventDate: DateTime(2026),
-      status: ReportStatus.active,
-      createdAt: DateTime(2026),
-      updatedAt: DateTime(2026),
-    ),
-  ];
+class _Reports implements FoundItemsRepository {
+  final items = <Report>[];
+  bool rejectWrite = false;
   @override
-  Future<List<Report>> fetchAll() async => List.of(items);
+  Future<List<Report>> fetchAll() async =>
+      items.where((r) => r.isActive).toList();
   @override
-  Future<void> create(Report report) async {
+  Future<List<Report>> fetchMine() async =>
+      items.where((r) => r.userId == _user.id).toList();
+  @override
+  Future<Report?> findById(String id) async {
+    for (final r in items) {
+      if (r.id == id) return r;
+    }
+    return null;
+  }
+
+  @override
+  Future<Report> create(Report report) async {
+    if (rejectWrite) throw const FormatException('Fallo de prueba');
     items.add(report);
+    return report;
+  }
+
+  @override
+  Future<Report> withdraw(Report report) async {
+    final saved = report.copyWith(status: ReportStatus.withdrawn);
+    items[items.indexWhere((r) => r.id == report.id)] = saved;
+    return saved;
   }
 
   @override
@@ -88,11 +97,7 @@ void main() {
     auth = AuthViewModel(authRepository);
     await auth.restoreSession();
     repository = _Reports();
-    reports = ReportsViewModel(
-      repository: repository,
-      notifications: notifications,
-      media: media,
-    );
+    reports = ReportsViewModel(repository: repository);
     profile = ProfileViewModel(
       repository: authRepository,
       auth: auth,
@@ -222,7 +227,7 @@ void main() {
   );
 
   testWidgets(
-    'formulario guarda solo un hallazgo local y no lo mezcla con el catálogo',
+    'publicación confirmada muestra logo y aparece en catálogo y Mis hallazgos',
     (tester) async {
       tester.view.physicalSize = const Size(390, 844);
       tester.view.devicePixelRatio = 1;
@@ -236,25 +241,32 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(ReportFormView), findsOneWidget);
       expect(find.text('Perdido'), findsNothing);
-      expect(find.textContaining('solo en este dispositivo'), findsOneWidget);
+      expect(
+        find.textContaining('tus datos de perfil permanecen privados'),
+        findsOneWidget,
+      );
       await tester.enterText(find.byType(TextFormField).at(0), 'Termo azul');
       await tester.enterText(
         find.byType(TextFormField).at(1),
         'Termo azul encontrado sin nombre',
       );
       await tester.ensureVisible(
-        find.text('Guardar hallazgo en este dispositivo'),
+        find.widgetWithText(FilledButton, 'Publicar hallazgo'),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Guardar hallazgo en este dispositivo'));
+      await tester.tap(find.widgetWithText(FilledButton, 'Publicar hallazgo'));
+      await tester.pumpAndSettle();
+      expect(find.text('Hallazgo publicado'), findsOneWidget);
+      expect(find.byType(BrandDialogLogo), findsOneWidget);
+      await tester.tap(find.text('Listo'));
       await tester.pumpAndSettle();
       expect(find.byType(ReportFormView), findsNothing);
       expect(repository.items.last.title, 'Termo azul');
       expect(repository.items.last.type, ReportType.found);
       expect(repository.items.last.custody, ItemCustody.student);
-      expect(reports.communityFound, isEmpty);
+      expect(reports.communityFound.single.title, 'Termo azul');
       await tab(tester, 'Inicio');
-      expect(find.byType(ReportCard), findsNothing);
+      expect(find.byType(ReportCard), findsOneWidget);
       await tab(tester, 'Perfil');
       await tester.ensureVisible(find.text('Mis hallazgos'));
       await tester.pumpAndSettle();
@@ -262,6 +274,162 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Termo azul'), findsOneWidget);
       expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'retiro propio usa confirmación con logo y desaparece del catálogo',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final date = DateTime(2026);
+      repository.items.add(
+        Report(
+          id: 'remote-item',
+          userId: _user.id,
+          type: ReportType.found,
+          title: 'Termo real de prueba',
+          description: 'Termo de prueba para retiro',
+          category: ItemCategory.bottles,
+          location: 'Biblioteca',
+          eventDate: date,
+          status: ReportStatus.active,
+          custody: ItemCustody.student,
+          createdAt: date,
+          updatedAt: date,
+        ),
+      );
+      await pump(tester);
+      await tester.ensureVisible(find.byType(ReportCard));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(ReportCard));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Retirar publicación'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Retirar publicación'));
+      await tester.pumpAndSettle();
+      expect(find.byType(BrandDialogLogo), findsOneWidget);
+      await tester.tap(find.text('Retirar'));
+      await tester.pumpAndSettle();
+      expect(find.text('Retirada'), findsOneWidget);
+      expect(find.text('Editar publicación'), findsNothing);
+      expect(find.text('Retirar publicación'), findsNothing);
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      expect(find.byType(ReportCard), findsNothing);
+      expect(reports.communityFound, isEmpty);
+      expect(reports.mine(_user.id).single.status, ReportStatus.withdrawn);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'detalle ajeno con custodia Alumno mantiene Creo que es mío deshabilitado',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final date = DateTime(2026);
+      repository.items.add(
+        Report(
+          id: 'student-item',
+          userId: 'other-student',
+          type: ReportType.found,
+          title: 'Llaves de prueba',
+          description: 'Llaves con llavero de prueba',
+          category: ItemCategory.keys,
+          location: 'Biblioteca',
+          eventDate: date,
+          status: ReportStatus.active,
+          custody: ItemCustody.student,
+          createdAt: date,
+          updatedAt: date,
+        ),
+      );
+      await pump(tester);
+      await tester.ensureVisible(find.byType(ReportCard));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(ReportCard));
+      await tester.pumpAndSettle();
+      final claim = find.widgetWithText(FilledButton, 'Creo que es mío');
+      expect(claim, findsOneWidget);
+      expect(tester.widget<FilledButton>(claim).onPressed, isNull);
+      expect(find.text('Editar publicación'), findsNothing);
+      expect(find.text('Retirar publicación'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'detalle ajeno en Prefectura declara entrega sin ofrecer edición ni confirmarla',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final date = DateTime(2026);
+      repository.items.add(
+        Report(
+          id: 'someone-elses-item',
+          userId: 'other-student',
+          type: ReportType.found,
+          title: 'Llaves de prueba',
+          description: 'Llaves con llavero de prueba',
+          category: ItemCategory.keys,
+          location: 'Biblioteca',
+          eventDate: date,
+          status: ReportStatus.active,
+          custody: ItemCustody.prefecture,
+          createdAt: date,
+          updatedAt: date,
+        ),
+      );
+      await pump(tester);
+      await tester.ensureVisible(find.byType(ReportCard));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(ReportCard));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('Prefectura no ha confirmado su recepción'),
+        findsOneWidget,
+      );
+      expect(find.text('Editar publicación'), findsNothing);
+      expect(find.text('Retirar publicación'), findsNothing);
+      expect(find.text('Creo que es mío'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'un error al publicar conserva formulario y no muestra confirmación de éxito',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      repository.rejectWrite = true;
+      await pump(tester);
+      await tab(tester, 'Publicar');
+      await tester.ensureVisible(find.text('Preparar hallazgo'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Preparar hallazgo'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextFormField).at(0), 'Termo azul');
+      await tester.enterText(
+        find.byType(TextFormField).at(1),
+        'Termo azul encontrado',
+      );
+      final submit = find.widgetWithText(FilledButton, 'Publicar hallazgo');
+      await tester.ensureVisible(submit);
+      await tester.pumpAndSettle();
+      await tester.tap(submit);
+      await tester.pumpAndSettle();
+      expect(find.byType(ReportFormView), findsOneWidget);
+      expect(find.text('Hallazgo publicado'), findsNothing);
+      expect(repository.items, isEmpty);
     },
   );
 

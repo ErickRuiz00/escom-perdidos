@@ -49,3 +49,6 @@ app.*.map.json
 
 # Kotlin build/session cache generated during Android compilation.
 /android/.kotlin/
+
+# Herramienta local de pruebas SQL; no se incluye en Flutter.
+/tools/sql-security/node_modules/

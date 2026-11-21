@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/app_status_colors.dart';
 import '../../data/models/report.dart';
+import '../../core/constants/escom.dart';
 import 'common.dart';
 
 /// Tarjeta de un reporte en las listas.
@@ -31,6 +32,7 @@ class ReportCard extends StatelessWidget {
                     dimension: 84,
                     child: ReportImage(
                       path: report.photoPath,
+                      storagePath: report.photoObjectPath,
                       category: report.category,
                       decodeWidth: 84,
                       iconSize: 34,
@@ -48,10 +50,19 @@ class ReportCard extends StatelessWidget {
                       runSpacing: 4,
                       children: [
                         TypeBadge(type: report.type, dense: true),
-                        if (!report.isActive)
-                          const StatusBadge(
+                        if (report.status == ReportStatus.withdrawn)
+                          Chip(
+                            avatar: const Icon(
+                              Icons.archive_outlined,
+                              size: 14,
+                            ),
+                            label: Text(report.status.label),
+                            visualDensity: VisualDensity.compact,
+                          )
+                        else if (!report.isActive)
+                          StatusBadge(
                             state: ItemVisualState.delivered,
-                            label: 'Resuelto',
+                            label: report.status.label,
                             dense: true,
                           ),
                       ],

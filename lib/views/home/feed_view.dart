@@ -248,7 +248,11 @@ class _FeedViewState extends State<FeedView> {
                   ),
                   const SizedBox(height: 16),
                   CommunityResults(
-                    reports: context.watch<ReportsViewModel>().communityFound,
+                    reports: context
+                        .watch<ReportsViewModel>()
+                        .communityFound
+                        .take(6)
+                        .toList(),
                   ),
                 ],
               ),

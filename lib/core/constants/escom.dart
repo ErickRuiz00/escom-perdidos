@@ -66,7 +66,9 @@ enum ReportType {
 
 enum ReportStatus {
   active('Activo'),
-  resolved('Resuelto');
+  resolved('Resuelto'), // Solo compatibilidad con SQLite heredado.
+  withdrawn('Retirada'),
+  returned('Devolución confirmada');
 
   const ReportStatus(this.label);
   final String label;

@@ -20,6 +20,7 @@ class Report {
     this.contact,
     this.authorName,
     this.custody,
+    this.photoObjectPath,
   });
 
   final String id;
@@ -48,6 +49,9 @@ class Report {
   final String? authorName;
   final ItemCustody? custody;
 
+  /// Ruta privada de Storage, nunca una URL firmada ni una ruta local.
+  final String? photoObjectPath;
+
   bool get hasLocation => latitude != null && longitude != null;
   bool get isActive => status == ReportStatus.active;
 
@@ -67,6 +71,7 @@ class Report {
     ItemCustody? custody,
     bool clearPhoto = false,
     bool clearCoordinates = false,
+    bool clearRemotePhoto = false,
   }) {
     return Report(
       id: id,
@@ -86,6 +91,7 @@ class Report {
       contact: contact ?? this.contact,
       authorName: authorName,
       custody: custody ?? this.custody,
+      photoObjectPath: clearRemotePhoto ? null : photoObjectPath,
     );
   }
 
@@ -114,6 +120,38 @@ class Report {
       },
     );
   }
+
+  factory Report.fromRemote(Map<String, dynamic> row) => Report(
+    id: row['id'] as String,
+    userId: row['finder_id'] as String,
+    type: ReportType.found,
+    title: row['title'] as String,
+    description: row['description'] as String,
+    category: ItemCategory.values.byName(row['category'] as String),
+    location: row['zone'] as String,
+    eventDate: DateTime.parse(row['found_on'] as String),
+    status: switch (row['status']) {
+      'active' => ReportStatus.active,
+      'withdrawn' => ReportStatus.withdrawn,
+      'returned' => ReportStatus.returned,
+      _ => throw const FormatException('Estado desconocido'),
+    },
+    custody: ItemCustody.values.byName(row['custody'] as String),
+    createdAt: DateTime.parse(row['created_at'] as String),
+    updatedAt: DateTime.parse(row['updated_at'] as String),
+    photoObjectPath: row['photo_path'] as String?,
+  );
+
+  Map<String, dynamic> toRemote() => {
+    'title': title.trim(),
+    'category': category.name,
+    'description': description.trim(),
+    'found_on':
+        '${eventDate.year.toString().padLeft(4, '0')}-${eventDate.month.toString().padLeft(2, '0')}-${eventDate.day.toString().padLeft(2, '0')}',
+    'zone': location,
+    'custody': custody?.name,
+    'photo_path': photoObjectPath,
+  };
 
   Map<String, Object?> toMap() => {
     'id': id,

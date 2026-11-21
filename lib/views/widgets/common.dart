@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import '../../core/constants/escom.dart';
 import '../../core/theme/app_status_colors.dart';
 import '../../data/models/user.dart';
+import '../../features/splash/presentation/animated_circuit_logo.dart';
+import 'remote_report_image.dart';
 
 /// Breakpoint a partir del cual se usa el diseño para tablet (RNF1 - adaptativo).
 const double kWideLayout = 700;
@@ -43,12 +45,14 @@ class ReportImage extends StatelessWidget {
     required this.category,
     this.decodeWidth = 400,
     this.iconSize = 40,
+    this.storagePath,
   });
 
   final String? path;
   final ItemCategory category;
   final int decodeWidth;
   final double iconSize;
+  final String? storagePath;
 
   @override
   Widget build(BuildContext context) {
@@ -56,6 +60,12 @@ class ReportImage extends StatelessWidget {
       category: category,
       size: iconSize,
     );
+    if (path == null && storagePath != null) {
+      return RemoteReportImage(
+        storagePath: storagePath!,
+        placeholder: placeholder,
+      );
+    }
     if (path == null) return placeholder;
     final ratio = MediaQuery.devicePixelRatioOf(context);
     return Image.file(
@@ -302,6 +312,8 @@ Future<bool> confirmAction(
   final result = await showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
+      icon: const Center(child: BrandDialogLogo()),
+      scrollable: true,
       title: Text(title),
       content: Text(message),
       actions: [
@@ -324,6 +336,22 @@ Future<bool> confirmAction(
     ),
   );
   return result ?? false;
+}
+
+class BrandDialogLogo extends StatelessWidget {
+  const BrandDialogLogo({super.key});
+  @override
+  Widget build(BuildContext context) {
+    final reduce = MediaQuery.disableAnimationsOf(context);
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: reduce ? 1 : 0, end: 1),
+      duration: reduce ? Duration.zero : const Duration(milliseconds: 650),
+      builder: (_, value, _) => AnimatedCircuitLogo(
+        progress: AlwaysStoppedAnimation(value),
+        size: 76,
+      ),
+    );
+  }
 }
 
 /// Hoja inferior para elegir entre cámara y galería. Devuelve `true` si es cámara.

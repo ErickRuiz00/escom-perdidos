@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../viewmodels/reports_viewmodel.dart';
 
 import '../../core/constants/escom.dart';
 import '../../data/models/report.dart';
 import '../reports/report_detail_view.dart';
 import '../widgets/common.dart';
-import '../widgets/local_only_notice.dart';
+import '../widgets/publication_notice.dart';
 import '../widgets/report_card.dart';
 
 /// Solo recibe publicaciones públicas; nunca consulta el almacenamiento local.
-class CommunityResults extends StatelessWidget {
+class CommunityResults extends StatefulWidget {
   const CommunityResults({
     super.key,
     required this.reports,
@@ -20,32 +22,72 @@ class CommunityResults extends StatelessWidget {
   final VoidCallback? onClear;
 
   @override
+  State<CommunityResults> createState() => _CommunityResultsState();
+}
+
+class _CommunityResultsState extends State<CommunityResults> {
+  int _limit = 30;
+
+  @override
   Widget build(BuildContext context) {
-    final found = reports.where((r) => r.type == ReportType.found).toList();
+    final vm = context.watch<ReportsViewModel>();
+    final found = widget.reports
+        .where((r) => r.type == ReportType.found && r.isActive)
+        .toList();
+    if (vm.loading && found.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(40),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (vm.error != null) {
+      return Card(
+        child: EmptyState(
+          icon: Icons.cloud_off_outlined,
+          title: 'No pudimos consultar los hallazgos',
+          message: vm.error!,
+          action: TextButton(
+            onPressed: vm.load,
+            child: const Text('Reintentar'),
+          ),
+        ),
+      );
+    }
     if (found.isEmpty) {
       return Card(
         child: EmptyState(
-          icon: searching
+          icon: widget.searching
               ? Icons.search_off_rounded
               : Icons.inventory_2_outlined,
-          title: searching
+          title: widget.searching
               ? 'Sin hallazgos para esta búsqueda'
               : 'El próximo reencuentro empieza aquí',
-          message: searching
+          message: widget.searching
               ? 'Prueba otra categoría, zona o nombre. Aún no hay publicaciones disponibles para mostrar.'
               : 'Aún no hay publicaciones de hallazgos disponibles. Cuando las haya, podrás consultarlas aquí.',
-          action: searching && onClear != null
+          action: widget.searching && widget.onClear != null
               ? TextButton(
-                  onPressed: onClear,
+                  onPressed: widget.onClear,
                   child: const Text('Limpiar búsqueda'),
                 )
-              : null,
+              : TextButton(
+                  onPressed: vm.load,
+                  child: const Text('Actualizar hallazgos'),
+                ),
         ),
       );
     }
     return Column(
       children: [
-        for (final report in found)
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton.icon(
+            onPressed: vm.load,
+            icon: const Icon(Icons.refresh_rounded),
+            label: const Text('Actualizar hallazgos'),
+          ),
+        ),
+        for (final report in found.take(_limit))
           Padding(
             padding: const EdgeInsets.only(bottom: 12),
             child: ReportCard(
@@ -56,6 +98,11 @@ class CommunityResults extends StatelessWidget {
                 ),
               ),
             ),
+          ),
+        if (found.length > _limit)
+          TextButton(
+            onPressed: () => setState(() => _limit += 30),
+            child: const Text('Mostrar más hallazgos'),
           ),
       ],
     );
@@ -131,7 +178,7 @@ class PublishView extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 24),
-                  const LocalOnlyNotice(),
+                  const PublicationNotice(),
                   const SizedBox(height: 16),
                   FilledButton.icon(
                     onPressed: onContinue,

@@ -131,7 +131,7 @@ class ProfileView extends StatelessWidget {
                         _ProfileLink(
                           icon: Icons.inventory_2_outlined,
                           title: 'Mis hallazgos',
-                          subtitle: 'Guardados en este dispositivo',
+                          subtitle: 'Tus publicaciones en la comunidad',
                           onTap: () => _open(
                             context,
                             MyReportsView(onNewReport: onNewReport),

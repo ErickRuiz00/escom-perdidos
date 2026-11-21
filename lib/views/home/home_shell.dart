@@ -3,8 +3,10 @@ import 'package:provider/provider.dart';
 
 import '../../features/splash/presentation/animated_circuit_logo.dart';
 import '../../viewmodels/reports_viewmodel.dart';
+import '../../viewmodels/auth_viewmodel.dart';
 import '../profile/profile_view.dart';
 import '../reports/report_form_view.dart';
+import '../reports/report_detail_view.dart';
 import '../widgets/common.dart';
 import 'community_views.dart';
 import 'explore_view.dart';
@@ -25,7 +27,11 @@ class _HomeShellState extends State<HomeShell> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) context.read<ReportsViewModel>().load();
+      if (mounted) {
+        context.read<ReportsViewModel>().bindUser(
+          context.read<AuthViewModel>().user?.id,
+        );
+      }
     });
   }
 
@@ -53,9 +59,16 @@ class _HomeShellState extends State<HomeShell> {
     _select(1);
   }
 
-  void _newReport() => Navigator.of(
-    context,
-  ).push(MaterialPageRoute<void>(builder: (_) => const ReportFormView()));
+  Future<void> _newReport() async {
+    final id = await Navigator.of(
+      context,
+    ).push<String>(MaterialPageRoute(builder: (_) => const ReportFormView()));
+    if (id != null && mounted) {
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(builder: (_) => ReportDetailView(reportId: id)),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -71,7 +84,10 @@ class _HomeShellState extends State<HomeShell> {
       index: _index,
       children: [
         for (var i = 0; i < pages.length; i++)
-          TickerMode(enabled: i == _index, child: pages[i]),
+          HeroMode(
+            enabled: i == _index,
+            child: TickerMode(enabled: i == _index, child: pages[i]),
+          ),
       ],
     );
     return PopScope(

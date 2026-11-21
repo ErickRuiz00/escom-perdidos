@@ -1,119 +1,181 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 
-import '../core/constants/escom.dart';
 import '../core/errors/app_exception.dart';
 import '../data/models/report.dart';
-import '../data/models/report_filter.dart';
 import '../data/models/user.dart';
-import '../data/repositories/report_repository.dart';
-import '../data/services/media_service.dart';
-import '../data/services/notification_service.dart';
+import '../data/repositories/found_items_repository.dart';
 
-/// Lista de reportes, búsqueda/filtros y operaciones CRUD (RF2).
+/// Catálogo remoto y publicaciones propias, aislados por sesión.
 class ReportsViewModel extends ChangeNotifier {
-  ReportsViewModel({
-    required ReportRepository repository,
-    required NotificationService notifications,
-    required MediaService media,
-  }) : _repository = repository,
-       _notifications = notifications,
-       _media = media;
-
-  final ReportRepository _repository;
-  final NotificationService _notifications;
-  final MediaService _media;
-
-  List<Report> _all = const [];
-  ReportFilter _filter = const ReportFilter();
-  List<Report> _visible = const [];
+  ReportsViewModel({required FoundItemsRepository repository})
+    : _repository = repository;
+  final FoundItemsRepository _repository;
+  List<Report> _community = const [];
+  List<Report> _mine = const [];
+  final _details = <String, Report>{};
+  final _photoUrls = <String, ({String url, DateTime expires})>{};
+  String? _userId;
+  int _session = 0;
+  int _request = 0;
+  bool _disposed = false;
   bool _loading = false;
   String? _error;
-
-  ReportFilter get filter => _filter;
-  List<Report> get visible => _visible;
   bool get loading => _loading;
+  int get sessionRevision => _session;
   String? get error => _error;
+  List<Report> get communityFound => List.unmodifiable(_community);
+  List<Report> mine(String uid) =>
+      uid == _userId ? List.unmodifiable(_mine) : const [];
+  Report? byId(String id) => _details[id];
 
-  /// El catálogo público todavía no tiene fuente remota. Nunca se mezclan los
-  /// registros de SQLite (incluidas muestras antiguas) con publicaciones reales.
-  List<Report> get communityFound => const [];
-
-  List<Report> mine(String userId) =>
-      _all.where((r) => r.userId == userId).toList(growable: false);
-
-  Report? byId(String id) {
-    for (final report in _all) {
-      if (report.id == id) return report;
-    }
-    return null;
+  void bindUser(String? uid) {
+    if (_userId == uid) return;
+    _userId = uid;
+    _session++;
+    _request++;
+    _community = const [];
+    _mine = const [];
+    _details.clear();
+    _photoUrls.clear();
+    _loading = uid != null;
+    _error = null;
+    final session = _session;
+    scheduleMicrotask(() {
+      if (_disposed || session != _session) return;
+      notifyListeners();
+      if (uid != null) unawaited(load());
+    });
   }
-
-  int count(ReportType type) =>
-      _all.where((r) => r.type == type && r.isActive).length;
 
   Future<void> load() async {
+    if (_userId == null) return;
+    final session = _session;
+    final request = ++_request;
     _loading = true;
     _error = null;
-    notifyListeners();
+    _notify();
     try {
-      _all = await _repository.fetchAll();
-      _applyFilter();
+      final lists = await Future.wait([
+        _repository.fetchAll(),
+        _repository.fetchMine(),
+      ]);
+      if (_disposed || session != _session || request != _request) return;
+      if (lists[1].any((r) => r.userId != _userId)) {
+        throw const PermissionException(
+          'No pudimos verificar tus publicaciones.',
+        );
+      }
+      _community = lists[0].where((r) => r.isActive).toList();
+      _mine = lists[1];
+      _details
+        ..clear()
+        ..addEntries([..._community, ..._mine].map((r) => MapEntry(r.id, r)));
     } catch (e) {
-      _error = userMessageFor(e);
+      if (!_disposed && session == _session && request == _request) {
+        _error = userMessageFor(e);
+      }
     } finally {
-      _loading = false;
-      notifyListeners();
+      if (!_disposed && session == _session && request == _request) {
+        _loading = false;
+        _notify();
+      }
     }
   }
 
-  void updateFilter(ReportFilter filter) {
-    _filter = filter;
-    _applyFilter();
-    notifyListeners();
+  Future<Report?> loadDetail(String id) async {
+    final session = _session;
+    final report = await _repository.findById(id);
+    _assertSession(session);
+    if (report == null) {
+      _details.remove(id);
+      _community = _community.where((r) => r.id != id).toList();
+    } else {
+      _store(report);
+    }
+    _notify();
+    return report;
   }
 
-  void search(String query) => updateFilter(_filter.copyWith(query: query));
-
-  /// Guarda un hallazgo local. No publica, notifica ni busca coincidencias.
-  Future<void> create(Report report, AppUser author) async {
-    if (report.type != ReportType.found) {
-      throw const AppException('Solo puedes registrar objetos encontrados.');
+  Future<Report> create(Report report, AppUser author) async {
+    final session = _session;
+    if (author.id != _userId || report.userId != _userId) {
+      throw const PermissionException(
+        'La sesión cambió. Inicia sesión de nuevo.',
+      );
     }
-    await _repository.create(report);
-    await load();
+    final saved = await _repository.create(report);
+    _assertSession(session);
+    _store(saved);
+    return saved;
   }
 
-  Future<void> update(Report report, {String? replacedPhoto}) async {
-    if (report.type != ReportType.found) {
-      throw const AppException('Solo puedes registrar objetos encontrados.');
-    }
-    await _repository.update(report);
-    if (replacedPhoto != null && replacedPhoto != report.photoPath) {
-      await _media.deleteImage(replacedPhoto);
-    }
-    await load();
-  }
-
-  Future<void> toggleResolved(Report report) async {
-    final resolved = report.isActive;
-    await _repository.update(
-      report.copyWith(
-        status: resolved ? ReportStatus.resolved : ReportStatus.active,
-        updatedAt: DateTime.now(),
-      ),
+  Future<Report> update(
+    Report report, {
+    required DateTime expectedUpdatedAt,
+  }) async {
+    final session = _session;
+    final saved = await _repository.update(
+      report,
+      expectedUpdatedAt: expectedUpdatedAt,
     );
-    if (resolved) {
-      await _notifications.cancel(NotificationService.idFor(report.id));
+    _assertSession(session);
+    _store(saved);
+    return saved;
+  }
+
+  Future<void> withdraw(Report report) async {
+    final session = _session;
+    final saved = await _repository.withdraw(report);
+    _assertSession(session);
+    _store(saved);
+  }
+
+  void _store(Report report) {
+    _request++;
+    _loading = false;
+    _error = null;
+    _details[report.id] = report;
+    _mine = [
+      if (report.userId == _userId) report,
+      ..._mine.where((r) => r.id != report.id),
+    ];
+    _community = [
+      if (report.isActive) report,
+      ..._community.where((r) => r.id != report.id),
+    ]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    _notify();
+  }
+
+  Future<String> photoUrl(String path, {bool refresh = false}) async {
+    final cached = _photoUrls[path];
+    if (!refresh && cached != null && cached.expires.isAfter(DateTime.now())) {
+      return cached.url;
     }
-    await load();
+    final session = _session;
+    final url = await _repository.signedPhotoUrl(path);
+    _assertSession(session);
+    _photoUrls[path] = (
+      url: url,
+      expires: DateTime.now().add(const Duration(seconds: 100)),
+    );
+    return url;
   }
 
-  Future<void> delete(Report report) async {
-    await _repository.delete(report.id);
-    await _notifications.cancel(NotificationService.idFor(report.id));
-    await _media.deleteImage(report.photoPath);
-    await load();
+  void _assertSession(int session) {
+    if (_disposed || _userId == null || session != _session) {
+      throw const AuthException('La sesión cambió. Abre de nuevo la pantalla.');
+    }
   }
 
-  void _applyFilter() => _visible = _filter.apply(_all);
+  void _notify() {
+    if (!_disposed) notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _photoUrls.clear();
+    super.dispose();
+  }
 }
