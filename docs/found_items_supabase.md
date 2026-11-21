@@ -1,9 +1,11 @@
 # Fase 3: publicaciones de hallazgos con Supabase
 
-El código utiliza Supabase como fuente compartida. **El cierre sigue pendiente
-de verificar el proyecto remoto con dos cuentas y Storage HTTP.** Las migraciones
-se aplican manualmente tras revisar el esquema; no se ejecutaron ni se volvieron
-a aplicar desde esta revisión. No se cambió Supabase Auth.
+El código utiliza Supabase como fuente compartida. **El usuario autorizó integrar
+la Fase 3 en `main` y continuar con la Fase 4, dejando la verificación remota A/B
+y de Storage HTTP para después.** Esa integración no certifica las pruebas
+remotas pendientes. El usuario confirmó que las migraciones están aplicadas y
+que dispone de dos cuentas de prueba; esta revisión no volvió a ejecutarlas.
+No se cambió Supabase Auth.
 
 ## Revisión de cierre del 21 de noviembre de 2026
 
@@ -79,19 +81,22 @@ raster corrupto, descarte de caché de imágenes y renovación tras fallo HTTP.
 Las pruebas iniciales detectaron el fallo de `setState`; se corrigió y se repitió
 la suite completa hasta el resultado anterior.
 
-**Decisión de integración:** conservar los cambios en la rama de Fase 3 y
-publicarla; no fusionar ni publicar `main` hasta ejecutar y registrar la prueba
-remota A/B descrita abajo y verificar las políticas y límites desplegados.
-No se considera un cierre oficial aprobado. «Creo que es mío» sigue
-deshabilitado y tiene una prueba de widget explícita; solicitudes, coincidencias,
-verificación de propiedad y chat siguen fuera del alcance.
+**Decisión de integración actualizada:** el usuario indicó expresamente
+«Ya fusiona a main, luego revisamos lo demás» y quiere continuar con la Fase 4.
+Se autoriza la fusión conservando el historial y la publicación de `main`, con
+las pruebas locales aprobadas y las comprobaciones remotas pendientes como
+seguimiento. No se consideran aprobadas las pruebas A/B, el SQL remoto ni
+Storage HTTP. «Creo que es mío» sigue deshabilitado y tiene una prueba de widget
+explícita; solicitudes, coincidencias, verificación de propiedad y chat quedan
+para el trabajo posterior de Fase 4.
 
 ## Git
 
 La fase 2 no estaba integrada: se revisó, pasó sus 81 pruebas y análisis, y se
 guardó en `f5d0e42`. Se integró por avance rápido y se subió únicamente `main` a
 GitHub. No se eliminaron ramas. La fase 3 se respalda en su propia rama,
-`feature/found-items-supabase`, sin integrarla con `main`.
+`feature/found-items-supabase`. El usuario autorizó ahora integrarla en `main`
+mediante un commit de fusión, conservando ambas ramas y su historial.
 
 ## SQL que debes revisar y aplicar
 
