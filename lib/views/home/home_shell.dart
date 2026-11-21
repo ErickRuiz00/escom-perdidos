@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../features/splash/presentation/animated_circuit_logo.dart';
 import '../../viewmodels/reports_viewmodel.dart';
 import '../../viewmodels/auth_viewmodel.dart';
+import '../../viewmodels/notifications_viewmodel.dart';
 import '../profile/profile_view.dart';
 import '../reports/report_form_view.dart';
 import '../reports/report_detail_view.dart';
@@ -19,13 +20,14 @@ class HomeShell extends StatefulWidget {
   State<HomeShell> createState() => _HomeShellState();
 }
 
-class _HomeShellState extends State<HomeShell> {
+class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   int _index = 0;
   final _exploreSearch = TextEditingController();
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         context.read<ReportsViewModel>().bindUser(
@@ -37,8 +39,16 @@ class _HomeShellState extends State<HomeShell> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _exploreSearch.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      context.read<NotificationsViewModel>().load();
+    }
   }
 
   static const _destinations = [

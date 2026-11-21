@@ -14,6 +14,9 @@ están en [publicaciones con Supabase](docs/found_items_supabase.md).
 La Fase 4, recuperación privada, chat, migración y pruebas A/B/C están en
 [recuperación de objetos](docs/recovery_requests_chat.md).
 
+La Fase 5 y sus pasos manuales de SQL, notificaciones, preferencias, tutorial y
+ayuda están en [notificaciones y ayuda](docs/notifications_help.md).
+
 ## Getting Started
 
 This project is a starting point for a Flutter application.

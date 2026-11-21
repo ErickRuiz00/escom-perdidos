@@ -1,5 +1,11 @@
 # Fase 4: recuperación y comunicación privada
 
+Actualización del 21 de noviembre de 2026: el usuario confirmó las pruebas
+manuales de las funcionalidades principales y autorizó la integración. La rama
+se fusionó a `main` en `dfed181` y se subió a GitHub antes de iniciar Fase 5.
+El contenido siguiente conserva el registro original de implementación y sus
+límites de verificación; no acredita pruebas remotas adicionales.
+
 Implementación en `feature/recovery-requests-chat`, creada desde `main`
 `ed626f8`. No integrar esta rama hasta la revisión manual del usuario. No se
 ejecutó la app en el teléfono ni en un emulador, ni se aplicó SQL remoto.

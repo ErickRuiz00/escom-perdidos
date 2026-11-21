@@ -12,6 +12,8 @@ import 'package:escom_perdidos/viewmodels/profile_viewmodel.dart';
 import 'package:escom_perdidos/viewmodels/reports_viewmodel.dart';
 import 'package:escom_perdidos/viewmodels/recovery_viewmodel.dart';
 import '../recovery_helpers.dart';
+import '../notification_helpers.dart';
+import 'package:escom_perdidos/viewmodels/notifications_viewmodel.dart';
 import 'package:escom_perdidos/views/auth/auth_flow.dart';
 import 'package:escom_perdidos/views/auth/welcome_view.dart';
 import 'package:escom_perdidos/views/home/home_shell.dart';
@@ -93,6 +95,7 @@ void main() {
   late ProfileViewModel profile;
   late _Reports repository;
   late RecoveryViewModel recovery;
+  late NotificationsViewModel inbox;
   final media = MediaService();
   final notifications = NotificationService();
   setUp(() async {
@@ -103,6 +106,9 @@ void main() {
     reports = ReportsViewModel(repository: repository);
     recovery = RecoveryViewModel(
       repository: FakeRecoveryRepository(uid: _user.id),
+    );
+    inbox = NotificationsViewModel(
+      repository: FakeNotificationsRepository(uid: _user.id),
     );
     profile = ProfileViewModel(
       repository: authRepository,
@@ -124,12 +130,14 @@ void main() {
     bool gate = false,
   }) async {
     recovery.bindUser(_user.id);
+    inbox.bindUser(_user.id);
     await tester.pumpWidget(
       MultiProvider(
         providers: [
           ChangeNotifierProvider.value(value: auth),
           ChangeNotifierProvider.value(value: reports),
           ChangeNotifierProvider(create: (_) => recovery),
+          ChangeNotifierProvider(create: (_) => inbox),
           ChangeNotifierProvider.value(value: profile),
           Provider.value(value: media),
           Provider(create: (_) => LocationService()),
