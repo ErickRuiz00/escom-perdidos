@@ -1,9 +1,14 @@
 # Fase 5: notificaciones internas, preferencias y ayuda
 
 Implementada en `feature/notifications-help`, desde `main` después de integrar
-la Fase 4 probada manualmente por el usuario. **No fusionar la Fase 5 todavía.**
-No se ejecutó la aplicación ni se utilizaron dispositivos o emuladores.
-No se consultó ni modificó el esquema Supabase remoto.
+la Fase 4 probada manualmente por el usuario. El 21 de noviembre de 2026 el
+usuario autorizó fusionar la Fase 5 a `main` y actualizar GitHub.
+
+La versión final incluye el recorrido visual de cinco secciones, con 177 pruebas
+Flutter aprobadas y análisis sin incidencias. Se compiló, instaló y abrió en el
+Samsung SM A022M por solicitud del usuario. Las 75 comprobaciones SQL se
+ejecutaron localmente. No se consultó ni modificó el esquema Supabase remoto;
+la aplicación y verificación remotas de SQL siguen siendo manuales.
 
 ## Aplicación manual de SQL
 
