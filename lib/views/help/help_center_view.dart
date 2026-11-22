@@ -85,11 +85,7 @@ class HelpCenterView extends StatelessWidget {
                     leading: const Icon(Icons.explore_outlined),
                     title: const Text('Ver tutorial'),
                     trailing: const Icon(Icons.chevron_right),
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => const TutorialView(),
-                      ),
-                    ),
+                    onTap: () => startSectionTutorial(context),
                   ),
                 ),
                 for (final (topic, question, answer) in _faqs)

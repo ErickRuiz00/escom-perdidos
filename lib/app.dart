@@ -23,6 +23,7 @@ import 'viewmodels/profile_viewmodel.dart';
 import 'viewmodels/reports_viewmodel.dart';
 import 'viewmodels/recovery_viewmodel.dart';
 import 'viewmodels/notifications_viewmodel.dart';
+import 'viewmodels/tutorial_viewmodel.dart';
 import 'viewmodels/weather_viewmodel.dart';
 import 'views/auth/auth_flow.dart';
 
@@ -96,6 +97,10 @@ class EscomPerdidosApp extends StatelessWidget {
           ),
           update: (_, auth, notifications) =>
               notifications!..bindUser(auth.user?.id),
+        ),
+        ChangeNotifierProxyProvider<AuthViewModel, TutorialViewModel>(
+          create: (_) => TutorialViewModel(),
+          update: (_, auth, tutorial) => tutorial!..bindUser(auth.user?.id),
         ),
       ],
       child: const _AppView(),

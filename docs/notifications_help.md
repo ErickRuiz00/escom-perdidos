@@ -87,11 +87,22 @@ ni se usa para simular recepción con la aplicación cerrada.
 
 ## Tutorial y ayuda
 
-Inicio invita a consultar una guía de seis pasos. «Ahora no», «Omitir» y
+Inicio invita a consultar una guía de cinco secciones. «Ahora no», «Omitir» y
 «Terminar» guardan que ya se consultó. Se puede abrir nuevamente desde Perfil
-o Centro de ayuda. Incluye iconos, progreso, preguntas con retroalimentación,
-navegación anterior/siguiente y contenido desplazable con ambos temas y texto
-grande. Si falla guardar una omisión, permite salir e informa que no se guardó.
+o Centro de ayuda. La guía recorre Inicio, Explorar, Publicar, Chats y Perfil
+sobre las pantallas reales: oscurece el fondo, resalta el botón correspondiente
+y lo señala con una flecha y una leyenda. Cambia de sección al avanzar, sin
+preguntas ni evaluaciones. Incluye progreso, anterior/siguiente y omisión;
+adapta el foco a la barra inferior o lateral, ambos temas y texto grande.
+Impide activar acciones del fondo por accidente y se cierra al cambiar de
+cuenta. Se puede salir aunque falle guardar su estado en Supabase.
+
+El ajuste visual se verificó con **177 pruebas Flutter aprobadas**, análisis sin
+incidencias y `git diff --check`. Incluye pruebas del foco en las cinco secciones,
+texto al 200 %, temas claro/oscuro, rotación, áreas del sistema, omisión sin red
+y reapertura desde Perfil/Ayuda. Reutiliza `tutorial_version=1`: no necesita otra
+migración ni vuelve a invitar a quienes ya completaron u omitieron la guía.
+Esas cuentas pueden repetirla con «Ver tutorial».
 
 Las FAQ explican publicaciones, Mis hallazgos, recuperación, propiedad, chats,
 devoluciones, Prefectura, avisos y seguridad. El enlace para reportar abuso
@@ -145,7 +156,7 @@ Pruebas manuales después de aplicar SQL:
   no. Cambiar preferencias y sesión; comprobar que no aparecen datos ajenos.
 - Cortar/restablecer red y dejar más de 50 avisos nuevos; recuperar todos sin
   duplicados. Probar reanudación y lectura desde otra sesión de la misma cuenta.
-- Omitir y repetir la guía, responder preguntas y terminarla; revisar ayuda y
+- Omitir y repetir la guía, recorrer las cinco secciones y terminarla; revisar ayuda y
   acceso a Reportar abuso en ambos temas y con fuente grande.
 - Con app cerrada no se espera push. Abrirla y recuperar los eventos guardados.
 

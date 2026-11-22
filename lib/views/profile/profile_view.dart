@@ -205,7 +205,7 @@ class ProfileView extends StatelessWidget {
                           icon: Icons.explore_outlined,
                           title: 'Ver tutorial',
                           subtitle: 'Aprende a publicar, recuperar y devolver',
-                          onTap: () => _open(context, const TutorialView()),
+                          onTap: () => startSectionTutorial(context),
                         ),
                       ],
                     ),

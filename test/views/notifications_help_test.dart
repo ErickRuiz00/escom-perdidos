@@ -11,7 +11,6 @@ import 'package:escom_perdidos/viewmodels/notifications_viewmodel.dart';
 import 'package:escom_perdidos/viewmodels/recovery_viewmodel.dart';
 import 'package:escom_perdidos/viewmodels/reports_viewmodel.dart';
 import 'package:escom_perdidos/views/help/help_center_view.dart';
-import 'package:escom_perdidos/views/help/tutorial_view.dart';
 import 'package:escom_perdidos/views/notifications/notification_preferences_view.dart';
 import 'package:escom_perdidos/views/notifications/notifications_view.dart';
 import 'package:escom_perdidos/views/recovery/recovery_chat_view.dart';
@@ -146,36 +145,6 @@ void main() {
 
   for (final dark in [false, true]) {
     testWidgets(
-      'tutorial visual e interactivo completo, oscuro=$dark, texto 200%',
-      (tester) async {
-        await pump(tester, const TutorialView(), dark: dark, scale: 2);
-        await tap(tester, 'Mis búsquedas');
-        expect(
-          find.text('Vuelve a leer la explicación y prueba otra opción.'),
-          findsOneWidget,
-        );
-        await tap(tester, 'Publicar');
-        expect(find.text('Así es. Ya puedes continuar.'), findsOneWidget);
-        for (final title in [
-          'Tus hallazgos, en un lugar',
-          'Creo que es mío',
-          'Solicitudes y chat',
-          'Confirma la devolución',
-          'Cuando está en Prefectura',
-        ]) {
-          await tap(tester, 'Siguiente');
-          expect(find.text(title), findsOneWidget);
-          expect(tester.takeException(), isNull);
-        }
-        await tap(tester, 'Anterior');
-        expect(find.text('Confirma la devolución'), findsOneWidget);
-        await tap(tester, 'Siguiente');
-        await tap(tester, 'Terminar');
-        expect(find.byType(TutorialView), findsNothing);
-        expect(repo.prefs.tutorialVersion, 1);
-      },
-    );
-    testWidgets(
       'ayuda accesible y reporte reutiliza solicitudes, oscuro=$dark',
       (tester) async {
         await pump(tester, const HelpCenterView(), dark: dark, scale: 2);
@@ -193,27 +162,6 @@ void main() {
       },
     );
   }
-  testWidgets('tutorial se omite, persiste y se puede consultar otra vez', (
-    tester,
-  ) async {
-    await pump(tester, const TutorialView());
-    await tap(tester, 'Omitir');
-    expect(repo.tutorials, 1);
-    expect(find.byType(TutorialView), findsNothing);
-    await tap(tester, 'Abrir');
-    expect(find.text('Paso 1 de 6'), findsOneWidget);
-    await tap(tester, 'Omitir');
-    expect(repo.tutorials, 2);
-  });
-  testWidgets('tutorial permite salir si falla guardar el estado de omisión', (
-    tester,
-  ) async {
-    await pump(tester, const TutorialView());
-    repo.fail = true;
-    await tap(tester, 'Omitir');
-    expect(find.byType(TutorialView), findsNothing);
-    expect(repo.tutorials, 0);
-  });
   testWidgets(
     'preferencias guardan categorías y avisan coincidencias futuras',
     (tester) async {
