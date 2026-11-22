@@ -202,13 +202,6 @@ class ChatsView extends StatelessWidget {
   Widget build(BuildContext context) => const RecoveryHubView();
 }
 
-class NotificationsView extends StatelessWidget {
-  const NotificationsView({super.key});
-  @override
-  Widget build(BuildContext context) =>
-      const RecoveryHubView(notifications: true);
-}
-
 class PendingActivityView extends StatelessWidget {
   const PendingActivityView({
     super.key,

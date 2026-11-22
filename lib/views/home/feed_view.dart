@@ -4,7 +4,9 @@ import 'package:provider/provider.dart';
 import '../../features/splash/presentation/animated_circuit_logo.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 import '../../viewmodels/reports_viewmodel.dart';
-import '../../viewmodels/recovery_viewmodel.dart';
+import '../../viewmodels/notifications_viewmodel.dart';
+import '../notifications/notifications_view.dart';
+import '../help/tutorial_view.dart';
 import '../widgets/common.dart';
 import 'community_views.dart';
 
@@ -81,9 +83,9 @@ class _FeedViewState extends State<FeedView> {
             ),
             icon: Badge(
               isLabelVisible:
-                  context.watch<RecoveryViewModel>().incomingPending > 0,
+                  context.watch<NotificationsViewModel>().unreadCount > 0,
               label: Text(
-                '${context.watch<RecoveryViewModel>().incomingPending}',
+                '${context.watch<NotificationsViewModel>().unreadCount}',
               ),
               child: const Icon(Icons.notifications_none_rounded),
             ),
@@ -102,6 +104,7 @@ class _FeedViewState extends State<FeedView> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  const TutorialInvitation(),
                   TweenAnimationBuilder<double>(
                     tween: Tween(begin: reducedMotion ? 1 : 0, end: 1),
                     duration: reducedMotion

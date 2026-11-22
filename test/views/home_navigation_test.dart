@@ -1,6 +1,7 @@
 import 'package:escom_perdidos/core/constants/escom.dart';
 import 'package:escom_perdidos/core/theme/app_theme.dart';
 import 'package:escom_perdidos/data/models/report.dart';
+import 'package:escom_perdidos/data/models/app_notification.dart';
 import 'package:escom_perdidos/data/models/user.dart';
 import 'package:escom_perdidos/data/repositories/auth_repository.dart';
 import 'package:escom_perdidos/data/repositories/found_items_repository.dart';
@@ -12,6 +13,9 @@ import 'package:escom_perdidos/viewmodels/profile_viewmodel.dart';
 import 'package:escom_perdidos/viewmodels/reports_viewmodel.dart';
 import 'package:escom_perdidos/viewmodels/recovery_viewmodel.dart';
 import '../recovery_helpers.dart';
+import '../notification_helpers.dart';
+import 'package:escom_perdidos/viewmodels/notifications_viewmodel.dart';
+import 'package:escom_perdidos/viewmodels/tutorial_viewmodel.dart';
 import 'package:escom_perdidos/views/auth/auth_flow.dart';
 import 'package:escom_perdidos/views/auth/welcome_view.dart';
 import 'package:escom_perdidos/views/home/home_shell.dart';
@@ -93,6 +97,9 @@ void main() {
   late ProfileViewModel profile;
   late _Reports repository;
   late RecoveryViewModel recovery;
+  late NotificationsViewModel inbox;
+  late FakeNotificationsRepository inboxRepository;
+  late TutorialViewModel tutorial;
   final media = MediaService();
   final notifications = NotificationService();
   setUp(() async {
@@ -104,6 +111,9 @@ void main() {
     recovery = RecoveryViewModel(
       repository: FakeRecoveryRepository(uid: _user.id),
     );
+    inboxRepository = FakeNotificationsRepository(uid: _user.id);
+    inbox = NotificationsViewModel(repository: inboxRepository);
+    tutorial = TutorialViewModel()..bindUser(_user.id);
     profile = ProfileViewModel(
       repository: authRepository,
       auth: auth,
@@ -124,12 +134,15 @@ void main() {
     bool gate = false,
   }) async {
     recovery.bindUser(_user.id);
+    inbox.bindUser(_user.id);
     await tester.pumpWidget(
       MultiProvider(
         providers: [
           ChangeNotifierProvider.value(value: auth),
           ChangeNotifierProvider.value(value: reports),
           ChangeNotifierProvider(create: (_) => recovery),
+          ChangeNotifierProvider(create: (_) => inbox),
+          ChangeNotifierProvider(lazy: false, create: (_) => tutorial),
           ChangeNotifierProvider.value(value: profile),
           Provider.value(value: media),
           Provider(create: (_) => LocationService()),
@@ -165,6 +178,176 @@ void main() {
     await tester.tap(destination);
     await tester.pumpAndSettle();
   }
+
+  Future<void> tourButton(WidgetTester tester, String text) async {
+    final button = find.descendant(
+      of: find.byKey(const Key('section-tutorial-overlay')),
+      matching: find.text(text),
+    );
+    await tester.ensureVisible(button);
+    await tester.pumpAndSettle();
+    await tester.tap(button);
+    await tester.pumpAndSettle();
+  }
+
+  for (final dark in [false, true]) {
+    for (final size in [const Size(320, 640), const Size(840, 500)]) {
+      testWidgets(
+        'recorrido señala las cinco secciones reales: $size, oscuro=$dark, texto 200%',
+        (tester) async {
+          tester.view.physicalSize = size;
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.resetPhysicalSize);
+          addTearDown(tester.view.resetDevicePixelRatio);
+          await pump(tester, dark: dark, scale: 2);
+          tutorial.start();
+          await tester.pumpAndSettle();
+          for (var step = 0; step < 5; step++) {
+            final title = [
+              'Inicio',
+              'Explorar',
+              'Publicar',
+              'Chats',
+              'Perfil',
+            ][step];
+            expect(
+              tester
+                  .widget<Text>(find.byKey(const Key('tutorial-section-title')))
+                  .data,
+              title,
+            );
+            expect(find.byKey(const Key('tutorial-arrow')), findsOneWidget);
+            final highlight = tester.getRect(
+              find.byKey(const Key('tutorial-spotlight')),
+            );
+            if (size.width >= 700) {
+              final rail = find.byType(NavigationRail);
+              expect(tester.widget<NavigationRail>(rail).selectedIndex, step);
+              expect(tester.getRect(rail).contains(highlight.center), isTrue);
+            } else {
+              final nav = find.byType(NavigationBar);
+              expect(tester.widget<NavigationBar>(nav).selectedIndex, step);
+              final bounds = tester.getRect(nav);
+              expect(
+                highlight.center.dx,
+                closeTo(bounds.left + bounds.width * (step + 0.5) / 5, 1),
+              );
+              expect(bounds.contains(highlight.center), isTrue);
+            }
+            expect(find.text('Así es. Ya puedes continuar.'), findsNothing);
+            expect(tester.takeException(), isNull);
+            if (step == 1) {
+              await tourButton(tester, 'Anterior');
+              expect(tutorial.step, 0);
+              await tourButton(tester, 'Siguiente');
+            }
+            await tourButton(tester, step == 4 ? 'Terminar' : 'Siguiente');
+          }
+          expect(
+            find.byKey(const Key('section-tutorial-overlay')),
+            findsNothing,
+          );
+          expect(inboxRepository.tutorials, 1);
+          expect(tutorial.active, isFalse);
+        },
+      );
+    }
+  }
+
+  testWidgets(
+    'invitación inicia recorrido, tocar foco avanza y se puede omitir y repetir desde ayuda',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      inboxRepository.prefs = const NotificationPreferences();
+      await pump(tester);
+      await tester.tap(find.text('Ver tutorial'));
+      await tester.pumpAndSettle();
+      expect(tutorial.active, isTrue);
+      await tester.tapAt(const Offset(380, 12));
+      await tester.pumpAndSettle();
+      expect(tutorial.step, 0);
+      await tester.tap(find.byKey(const Key('tutorial-spotlight')));
+      await tester.pumpAndSettle();
+      expect(tutorial.step, 1);
+      await tourButton(tester, 'Omitir');
+      expect(inboxRepository.prefs.tutorialVersion, 1);
+      await tab(tester, 'Perfil');
+      await tester.ensureVisible(find.text('Ver tutorial'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Ver tutorial'));
+      await tester.pumpAndSettle();
+      expect(tutorial.step, 0);
+      await tourButton(tester, 'Omitir');
+      await tab(tester, 'Perfil');
+      await tester.ensureVisible(find.text('Centro de ayuda'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Centro de ayuda'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Ver tutorial'));
+      await tester.pumpAndSettle();
+      expect(find.byType(BackButton), findsNothing);
+      expect(tutorial.active, isTrue);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(tutorial.active, isFalse);
+      expect(inboxRepository.tutorials, 3);
+    },
+  );
+
+  testWidgets(
+    'el foco se adapta al girar la pantalla y respeta las áreas del sistema',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      tester.view.padding = const FakeViewPadding(top: 24, bottom: 24);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPadding);
+      await pump(tester);
+      tutorial.start();
+      tutorial.goTo(4);
+      await tester.pumpAndSettle();
+      expect(
+        tester.getRect(find.byKey(const Key('tutorial-spotlight'))).bottom,
+        lessThan(820),
+      );
+      tester.view.physicalSize = const Size(840, 500);
+      await tester.pumpAndSettle();
+      expect(tutorial.step, 4);
+      expect(
+        tester
+            .getRect(find.byType(NavigationRail))
+            .contains(
+              tester.getCenter(find.byKey(const Key('tutorial-spotlight'))),
+            ),
+        isTrue,
+      );
+      expect(tester.takeException(), isNull);
+      await tourButton(tester, 'Terminar');
+    },
+  );
+
+  testWidgets(
+    'omitir funciona sin conexión y cambiar de cuenta limpia el recorrido',
+    (tester) async {
+      await pump(tester);
+      tutorial.start();
+      await tester.pumpAndSettle();
+      inboxRepository.fail = true;
+      await tourButton(tester, 'Omitir');
+      expect(tutorial.active, isFalse);
+      expect(inboxRepository.tutorials, 0);
+      expect(find.textContaining('Cerraste la guía.'), findsOneWidget);
+      tutorial.start();
+      await tester.pumpAndSettle();
+      tutorial.bindUser(null);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('section-tutorial-overlay')), findsNothing);
+    },
+  );
 
   testWidgets(
     'cinco pestañas conservan consulta, filtros, scroll y subpestaña de chats',

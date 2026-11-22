@@ -8,6 +8,10 @@ import '../home/my_reports_view.dart';
 import '../widgets/common.dart';
 import 'change_password_view.dart';
 import 'edit_profile_view.dart';
+import '../notifications/notifications_view.dart';
+import '../notifications/notification_preferences_view.dart';
+import '../help/help_center_view.dart';
+import '../help/tutorial_view.dart';
 
 class ProfileView extends StatelessWidget {
   const ProfileView({super.key, required this.onNewReport});
@@ -181,6 +185,31 @@ class ProfileView extends StatelessWidget {
                       onTap: () => _open(context, const SettingsView()),
                     ),
                   ),
+                  Card(
+                    child: Column(
+                      children: [
+                        _ProfileLink(
+                          icon: Icons.notifications_none_rounded,
+                          title: 'Notificaciones',
+                          subtitle: 'Historial de tu actividad',
+                          onTap: () =>
+                              _open(context, const NotificationsView()),
+                        ),
+                        _ProfileLink(
+                          icon: Icons.help_outline_rounded,
+                          title: 'Centro de ayuda',
+                          subtitle: 'Preguntas frecuentes y seguridad',
+                          onTap: () => _open(context, const HelpCenterView()),
+                        ),
+                        _ProfileLink(
+                          icon: Icons.explore_outlined,
+                          title: 'Ver tutorial',
+                          subtitle: 'Aprende a publicar, recuperar y devolver',
+                          onTap: () => startSectionTutorial(context),
+                        ),
+                      ],
+                    ),
+                  ),
                   const SizedBox(height: 28),
                   OutlinedButton.icon(
                     onPressed: () => _logout(context),
@@ -274,10 +303,15 @@ class SettingsView extends StatelessWidget {
                         title: Text('Cuenta vinculada con Google'),
                       ),
                     const Divider(height: 1),
-                    const ListTile(
-                      leading: Icon(Icons.notifications_none_rounded),
-                      title: Text('Notificaciones'),
-                      subtitle: Text('Disponibles en una próxima fase'),
+                    _ProfileLink(
+                      icon: Icons.notifications_none_rounded,
+                      title: 'Preferencias de avisos',
+                      subtitle: 'Elige qué eventos deseas recibir',
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const NotificationPreferencesView(),
+                        ),
+                      ),
                     ),
                   ],
                 ),

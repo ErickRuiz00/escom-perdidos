@@ -191,7 +191,10 @@ try {
     await denied(()=>request(B,R),'P0001');
   });
   const manual=(await readFile(new URL('../../supabase/verify_recovery.sql',import.meta.url),'utf8'))
-    .replaceAll('REEMPLAZA_UUID_A',A).replaceAll('REEMPLAZA_UUID_B',B).replaceAll('REEMPLAZA_UUID_C',C);
+    // Usa siempre fixtures locales, incluso si el usuario personalizó el script.
+    .replace(/(set_config\('recovery\.test_a',)'[^']*'/,`$1'${A}'`)
+    .replace(/(set_config\('recovery\.test_b',)'[^']*'/,`$1'${B}'`)
+    .replace(/(set_config\('recovery\.test_c',)'[^']*'/,`$1'${C}'`);
   await db.exec(manual); passed++;
   console.log('PASS script SQL manual A/B/C con rollback');
   console.log(`${passed} pruebas PostgreSQL Fase 4 aprobadas. Local en memoria; no prueba HTTP/Realtime remoto ni concurrencia de conexiones reales.`);
